@@ -36,7 +36,32 @@ The app adds these actions to Shortcuts through App Intents. The in-app
 - Siri: *"Add an expense in Expenses"*, *"How much did I spend in Expenses"*
 - CSV export
 
-## Build & install on your iPhone
+## Install from Windows (no Mac needed)
+
+GitHub builds the app on its macOS machines on every push to `main`
+(`.github/workflows/build-ipa.yml`). You then install the resulting `.ipa` from Windows.
+
+1. **Download the build:** GitHub repo ▸ **Actions** ▸ latest green *Build IPA* run ▸
+   **Artifacts** ▸ `ExpenseTracker-ipa` (a zip containing `ExpenseTracker.ipa`). Unzip it.
+2. **On Windows**, install **iTunes** and **iCloud** from apple.com (the web installers,
+   *not* the Microsoft Store versions), then install **Sideloadly** (sideloadly.io).
+3. Connect your iPhone by USB, unlock it, and tap **Trust**.
+4. Open Sideloadly, drag in `ExpenseTracker.ipa`, enter your Apple ID, and click **Start**.
+   Sideloadly signs the app with your Apple ID and installs it.
+5. On the iPhone:
+   - **Settings ▸ General ▸ VPN & Device Management** ▸ trust your Apple ID.
+   - **Settings ▸ Privacy & Security ▸ Developer Mode** ▸ On (the phone restarts).
+6. Open **Expenses** and follow the setup guide.
+
+**Free Apple ID limit:** the app stops opening after **7 days** and must be
+re-signed. Your data is kept when you re-sign. To re-sign, run Sideloadly again with
+the same `.ipa`, or turn on Sideloadly's *Automatic refresh* (needs the PC and iPhone on the same Wi‑Fi).
+**AltStore** (altstore.io) with AltServer on Windows is an alternative that refreshes automatically over Wi‑Fi.
+
+To avoid the 7-day expiry, a paid Apple Developer account ($99/year) gives you 1-year
+signing, or TestFlight distribution.
+
+## Build & install on your iPhone with a Mac
 
 Requirements: a Mac with **Xcode 15+**, an iPhone on **iOS 17+**, and a free Apple ID.
 
