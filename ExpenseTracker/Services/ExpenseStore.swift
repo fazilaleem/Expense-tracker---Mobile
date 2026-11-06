@@ -7,6 +7,10 @@ import SwiftData
 enum ExpenseStore {
 
     static let container: ModelContainer = {
+        // SwiftData doesn't create Application Support on first launch; make sure it exists.
+        if let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
         do {
             return try ModelContainer(for: Expense.self)
         } catch {

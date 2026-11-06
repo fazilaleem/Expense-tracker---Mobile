@@ -1,6 +1,7 @@
 import SwiftUI
+import AppIntents
 
-enum ExpenseCategory: String, Codable, CaseIterable, Identifiable {
+enum ExpenseCategory: String, Codable, CaseIterable, Identifiable, Sendable {
     case food = "Food & Dining"
     case groceries = "Groceries"
     case transport = "Transport"
