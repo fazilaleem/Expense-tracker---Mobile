@@ -75,6 +75,10 @@ jobs:
         run: |
           APP=com.personal.expensetracker
           mkdir -p shots
+          # Build a complete simulator app (the test build can lack a standalone executable).
+          xcodebuild build -project ExpenseTracker.xcodeproj -scheme ExpenseTracker \
+            -destination "id=$UDID" -derivedDataPath simbuild CODE_SIGNING_ALLOWED=NO \
+            ENABLE_DEBUG_DYLIB=NO | xcbeautify || exit ${PIPESTATUS[0]}
           # Fresh install so nothing from the test run (e.g. permission prompts) lingers.
           xcrun simctl uninstall "$UDID" $APP 2>/dev/null || true
           xcrun simctl install "$UDID" simbuild/Build/Products/Debug-iphonesimulator/ExpenseTracker.app
