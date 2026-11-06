@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import UserNotifications
 
 /// Rich local notifications for recorded expenses and budget alerts.

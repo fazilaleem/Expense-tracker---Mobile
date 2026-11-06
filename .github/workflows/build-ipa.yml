@@ -16,6 +16,10 @@ jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 40
+    defaults:
+      run:
+        # pipefail: a failing xcodebuild must fail the step even when piped through xcbeautify.
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -44,7 +48,7 @@ jobs:
             -scheme ExpenseTracker \
             -destination "id=$UDID" \
             -derivedDataPath simbuild \
-            CODE_SIGNING_ALLOWED=NO | xcbeautify || exit ${PIPESTATUS[0]}
+            CODE_SIGNING_ALLOWED=NO | xcbeautify
 
       - name: Build unsigned app for iPhone
         run: |
@@ -55,13 +59,14 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | xcbeautify || exit ${PIPESTATUS[0]}
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | xcbeautify
 
       - name: Package .ipa
         run: |
           mkdir -p Payload
           cp -R build/Build/Products/Release-iphoneos/ExpenseTracker.app Payload/
           zip -qry ExpenseTracker.ipa Payload
+          test -x Payload/ExpenseTracker.app/ExpenseTracker || { echo "App executable missing"; exit 1; }
           ls -lh ExpenseTracker.ipa
 
       - uses: actions/upload-artifact@v4
@@ -78,7 +83,7 @@ jobs:
           # Build a complete simulator app (the test build can lack a standalone executable).
           xcodebuild build -project ExpenseTracker.xcodeproj -scheme ExpenseTracker \
             -destination "id=$UDID" -derivedDataPath simbuild CODE_SIGNING_ALLOWED=NO \
-            ENABLE_DEBUG_DYLIB=NO | xcbeautify || exit ${PIPESTATUS[0]}
+            ENABLE_DEBUG_DYLIB=NO | xcbeautify
           # Fresh install so nothing from the test run (e.g. permission prompts) lingers.
           xcrun simctl uninstall "$UDID" $APP 2>/dev/null || true
           xcrun simctl install "$UDID" simbuild/Build/Products/Debug-iphonesimulator/ExpenseTracker.app
