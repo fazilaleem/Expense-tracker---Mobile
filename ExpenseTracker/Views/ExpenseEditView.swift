@@ -4,6 +4,8 @@ import SwiftData
 /// Add a new expense (expense == nil) or edit an existing one.
 struct ExpenseEditView: View {
     let expense: Expense?
+    /// Set when an existing expense is edited from a sheet (e.g. long-press ▸ Edit).
+    var presentedAsSheet = false
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
 
@@ -24,7 +26,7 @@ struct ExpenseEditView: View {
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 4)
 
     var body: some View {
-        if expense == nil {
+        if expense == nil || presentedAsSheet {
             NavigationStack { content }
         } else {
             content
@@ -46,7 +48,7 @@ struct ExpenseEditView: View {
         .navigationTitle(expense == nil ? "New expense" : "Edit")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if expense == nil {
+            if expense == nil || presentedAsSheet {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
             ToolbarItem(placement: .confirmationAction) {
@@ -191,6 +193,16 @@ struct ExpenseEditView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
+            Button {
+                ExpenseStore.duplicate(e)
+                saved.toggle()
+                dismiss()
+            } label: {
+                Label("Duplicate as new expense today", systemImage: "plus.square.on.square")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(Theme.emerald)
             Button(role: .destructive) { confirmDelete = true } label: {
                 Label("Delete transaction", systemImage: "trash")
                     .frame(maxWidth: .infinity)
@@ -242,6 +254,8 @@ struct ExpenseEditView: View {
             e.isIncome = isIncome
             e.note = note.isEmpty ? nil : note
             e.needsReview = false
+            try? context.save()
+            BudgetService.evaluate(after: e)
         } else {
             ExpenseStore.save(Expense(amount: value, currency: currency, merchant: name.isEmpty ? "Cash" : name,
                                       category: finalCategory, date: date, source: .manual,

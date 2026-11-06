@@ -5,6 +5,7 @@ import SwiftData
 struct ExpenseTrackerApp: App {
     init() {
         let underTest = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        BudgetService.migrateLegacyMonthlyBudget()
         if DemoData.isEnabled {
             DemoData.seedIfNeeded()
         } else if !underTest {
@@ -23,6 +24,9 @@ struct ExpenseTrackerApp: App {
 
 struct ContentView: View {
     @AppStorage(SettingsKey.hasOnboarded) private var hasOnboarded = false
+    @AppStorage(SettingsKey.appLock) private var appLock = false
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var locked = UserDefaults.standard.bool(forKey: SettingsKey.appLock)
     /// `-startTab N` launch argument picks the initial tab (used for screenshots).
     @State private var tab = UserDefaults.standard.integer(forKey: "startTab")
 
@@ -34,8 +38,8 @@ struct ContentView: View {
             TransactionsView()
                 .tabItem { Label("Transactions", systemImage: "list.bullet.rectangle") }
                 .tag(1)
-            ParseTestView()
-                .tabItem { Label("Paste SMS", systemImage: "doc.on.clipboard") }
+            BudgetsView()
+                .tabItem { Label("Budgets", systemImage: "target") }
                 .tag(2)
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape.fill") }
@@ -43,6 +47,16 @@ struct ContentView: View {
         }
         .tint(Theme.emerald)
         .fontDesign(.rounded)
+        .overlay {
+            if appLock && locked {
+                AppLockView { withAnimation(.easeOut(duration: 0.25)) { locked = false } }
+                    .transition(.opacity)
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Lock again whenever the app goes to the background.
+            if phase == .background && appLock { locked = true }
+        }
         .sheet(isPresented: Binding(get: { !hasOnboarded }, set: { if !$0 { hasOnboarded = true } })) {
             NavigationStack {
                 SetupGuideView()

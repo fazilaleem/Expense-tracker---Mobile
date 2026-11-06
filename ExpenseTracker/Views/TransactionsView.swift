@@ -9,6 +9,8 @@ struct TransactionsView: View {
     @State private var search = ""
     @State private var categoryFilter: ExpenseCategory?
     @State private var showingAdd = false
+    @State private var showingPaste = false
+    @State private var editingSheet: Expense?
 
     private var filtered: [Expense] {
         expenses.filter { e in
@@ -82,13 +84,33 @@ struct TransactionsView: View {
                                     } label: { Label("Looks good", systemImage: "checkmark") }
                                         .tint(Theme.emerald)
                                 }
+                                Button { editingSheet = e } label: { Label("Edit", systemImage: "pencil") }
+                                    .tint(Color(light: 0x3B82F6, dark: 0x60A5FA))
                             }
-                    }
-                    .onDelete { idx in
-                        withAnimation {
-                            for i in idx { context.delete(group.items[i]) }
-                            try? context.save()
-                        }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    withAnimation { context.delete(e); try? context.save() }
+                                } label: { Label("Delete", systemImage: "trash") }
+                                Button {
+                                    withAnimation { _ = ExpenseStore.duplicate(e) }
+                                } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
+                                    .tint(Color(light: 0x8B5CF6, dark: 0xA78BFA))
+                            }
+                            .contextMenu {
+                                Button { editingSheet = e } label: { Label("Edit", systemImage: "pencil") }
+                                Button { withAnimation { _ = ExpenseStore.duplicate(e) } } label: {
+                                    Label("Duplicate as today", systemImage: "plus.square.on.square")
+                                }
+                                if e.needsReview {
+                                    Button { withAnimation { e.needsReview = false } } label: {
+                                        Label("Mark as reviewed", systemImage: "checkmark.circle")
+                                    }
+                                }
+                                Divider()
+                                Button(role: .destructive) {
+                                    withAnimation { context.delete(e); try? context.save() }
+                                } label: { Label("Delete", systemImage: "trash") }
+                            }
                     }
                 } header: {
                     dayHeader(group)
@@ -104,17 +126,13 @@ struct TransactionsView: View {
         .toolbar {
             if !onlyReview {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showingAdd = true } label: {
-                        Image(systemName: "plus")
-                            .font(.body.weight(.semibold))
-                            .frame(width: 34, height: 34)
-                            .background(Theme.emeraldSoft, in: Circle())
-                    }
-                    .accessibilityLabel("Add expense")
+                    AddMenu(showingAdd: $showingAdd, showingPaste: $showingPaste)
                 }
             }
         }
         .sheet(isPresented: $showingAdd) { ExpenseEditView(expense: nil) }
+        .sheet(isPresented: $showingPaste) { ParseTestView(isSheet: true) }
+        .sheet(item: $editingSheet) { e in ExpenseEditView(expense: e, presentedAsSheet: true) }
         .sensoryFeedback(.selection, trigger: categoryFilter)
 
         if onlyReview { list } else { NavigationStack { list } }
@@ -175,6 +193,26 @@ struct TransactionsView: View {
             ContentUnavailableView("No transactions", systemImage: "tray",
                                    description: Text("Bank SMS and Apple Pay payments will appear here automatically."))
         }
+    }
+}
+
+/// "+" button offering manual entry or pasting a bank SMS.
+struct AddMenu: View {
+    @Binding var showingAdd: Bool
+    @Binding var showingPaste: Bool
+    var body: some View {
+        Menu {
+            Button { showingAdd = true } label: { Label("Add expense manually", systemImage: "square.and.pencil") }
+            Button { showingPaste = true } label: { Label("Paste bank SMS", systemImage: "doc.on.clipboard") }
+        } label: {
+            Image(systemName: "plus")
+                .font(.body.weight(.semibold))
+                .frame(width: 34, height: 34)
+                .background(Theme.emeraldSoft, in: Circle())
+        } primaryAction: {
+            showingAdd = true
+        }
+        .accessibilityLabel("Add expense")
     }
 }
 

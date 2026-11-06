@@ -28,7 +28,7 @@ struct SetupGuideView: View {
             } header: {
                 Label("1 · Bank SMS", systemImage: "message.fill")
             } footer: {
-                Text("Tip: use the **Paste SMS** tab to check that your bank's message format is read correctly.")
+                Text("Tip: use **+ ▸ Paste bank SMS** (or Settings ▸ Paste & test) to check that your bank's message format is read correctly.")
             }
 
             Section {

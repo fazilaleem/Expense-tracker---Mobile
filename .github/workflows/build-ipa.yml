@@ -79,20 +79,20 @@ jobs:
           xcrun simctl uninstall "$UDID" $APP 2>/dev/null || true
           xcrun simctl install "$UDID" simbuild/Build/Products/Debug-iphonesimulator/ExpenseTracker.app
           xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
-          names=(overview transactions paste settings)
+          names=(overview transactions budgets settings)
           for mode in light dark; do
             xcrun simctl ui "$UDID" appearance $mode
             for t in 0 1 2 3; do
               xcrun simctl terminate "$UDID" $APP 2>/dev/null || true
               xcrun simctl launch "$UDID" $APP -seedDemo YES -hasOnboarded YES -startTab $t \
-                -defaultCurrency AED -monthlyBudget 3000
+                -defaultCurrency AED
               sleep 5
               xcrun simctl io "$UDID" screenshot "shots/${mode}-${t}-${names[$t]}.png"
             done
             for target in categories bottom; do
               xcrun simctl terminate "$UDID" $APP 2>/dev/null || true
               xcrun simctl launch "$UDID" $APP -seedDemo YES -hasOnboarded YES -startTab 0 \
-                -defaultCurrency AED -monthlyBudget 3000 -demoScrollTo $target
+                -defaultCurrency AED -demoScrollTo $target
               sleep 6
               xcrun simctl io "$UDID" screenshot "shots/${mode}-0-overview-${target}.png"
             done

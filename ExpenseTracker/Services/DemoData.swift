@@ -44,6 +44,11 @@ enum DemoData {
             let date = cal.date(byAdding: .day, value: -(today + 3 + j * 4), to: now)!
             ctx.insert(Expense(amount: s.2 * 1.1, currency: cur, merchant: s.0, category: s.1, date: date, source: s.3))
         }
+        ctx.insert(Budget(category: nil, period: .monthly, limit: 3000, currency: cur))
+        ctx.insert(Budget(category: .food, period: .weekly, limit: 150, currency: cur))
+        ctx.insert(Budget(category: .groceries, period: .monthly, limit: 600, currency: cur))
+        ctx.insert(Budget(category: .transport, period: .daily, limit: 60, currency: cur))
+        ctx.insert(Budget(category: .bills, period: .monthly, limit: 450, currency: cur))
         try? ctx.save()
     }
 }

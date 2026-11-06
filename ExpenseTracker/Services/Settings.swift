@@ -8,6 +8,8 @@ enum SettingsKey {
     static let mergeDuplicates = "mergeDuplicates"
     static let ignoreIncome = "ignoreIncome"
     static let hasOnboarded = "hasOnboarded"
+    static let budgetAlerts = "budgetAlerts"
+    static let appLock = "appLock"
 }
 
 enum AppSettings {

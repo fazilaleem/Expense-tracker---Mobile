@@ -2,6 +2,8 @@ import SwiftUI
 
 /// Paste any bank SMS / notification to record it manually or to test the parser.
 struct ParseTestView: View {
+    var isSheet = false
+    @Environment(\.dismiss) private var dismiss
     @State private var text = ""
     @State private var resultMessage: String?
     @State private var recorded = false
@@ -12,7 +14,14 @@ struct ParseTestView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        if isSheet {
+            NavigationStack { content }
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
             ScrollView {
                 VStack(spacing: 16) {
                     inputCard.appearAnimation()
@@ -35,9 +44,14 @@ struct ParseTestView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .themedBackground()
-            .navigationTitle("Paste SMS")
+            .navigationTitle("Paste bank SMS")
+            .navigationBarTitleDisplayMode(isSheet ? .inline : .large)
+            .toolbar {
+                if isSheet {
+                    ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
+                }
+            }
             .sensoryFeedback(.success, trigger: recorded)
-        }
     }
 
     private var inputCard: some View {

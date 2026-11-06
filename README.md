@@ -21,7 +21,7 @@ The app adds these actions to Shortcuts through App Intents. The in-app
 
 > Push notifications from banking apps cannot be read by Shortcuts. Turn on SMS
 > alerts in your bank for the best coverage. You can always paste an older
-> message in the **Paste SMS** tab.
+> message with **+ ▸ Paste bank SMS**.
 
 ## Features
 - Parser for bank / card SMS in many formats: INR, AED, PKR, SAR, USD, GBP, EUR and 20+ more,
@@ -34,6 +34,11 @@ The app adds these actions to Shortcuts through App Intents. The in-app
 - Overview: month switcher, budget progress, donut chart by category, daily bar chart
 - Search and filter transactions, swipe to delete or approve, full edit screen with the original SMS
 - Siri: *"Add an expense in Expenses"*, *"How much did I spend in Expenses"*
+- **Budgets** — overall or per category, resetting daily, weekly or monthly; notifications at your
+  warning level (default 80%) and when fully used, once per period
+- Overview: "vs last month" comparison, budget alerts, quick stats (today / this week / daily average)
+- Edit any recorded transaction (tap, swipe or long-press), duplicate, delete; add manually or paste an SMS
+- **Face ID / passcode lock**
 - CSV export
 
 ## Install from Windows (no Mac needed)
@@ -93,11 +98,11 @@ ExpenseTracker/
   Models/       Expense (SwiftData), ExpenseCategory
   Services/     TransactionParser, Categorizer, ExpenseStore (save + dedupe), notifications, CSV
   Intents/      App Intents used by Shortcuts and Siri
-  Views/        Overview, Transactions, Edit, Paste SMS, Settings, Setup guide
+  Views/        Overview, Transactions, Budgets, Edit, Paste SMS, Settings, Setup guide, App lock
 ExpenseTrackerTests/            parser + categoriser tests
 ```
 
 ## Adding your bank's format
-If a message isn't read correctly, paste it into the **Paste SMS** tab to see what was detected.
+If a message isn't read correctly, paste it via **+ ▸ Paste bank SMS** to see what was detected.
 Then add a test case to `TransactionParserTests.swift` and adjust the keyword lists or
 merchant patterns in `TransactionParser.swift`.

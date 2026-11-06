@@ -12,7 +12,7 @@ enum ExpenseStore {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
         do {
-            return try ModelContainer(for: Expense.self)
+            return try ModelContainer(for: Expense.self, Budget.self)
         } catch {
             fatalError("Could not create SwiftData container: \(error)")
         }
@@ -90,6 +90,7 @@ enum ExpenseStore {
         }
         context.insert(expense)
         try? context.save()
+        BudgetService.evaluate(after: expense)
         return .logged(expense)
     }
 
@@ -106,6 +107,17 @@ enum ExpenseStore {
             c.currency == e.currency && c.isIncome == e.isIncome &&
             (c.sourceRaw != e.sourceRaw || (c.rawText != nil && c.rawText == e.rawText))
         }
+    }
+
+    /// Copy an expense as a new manual entry dated now (e.g. a repeat purchase).
+    @discardableResult
+    static func duplicate(_ e: Expense) -> Expense {
+        let copy = Expense(amount: e.amount, currency: e.currency, merchant: e.merchant, category: e.category,
+                           date: .now, source: .manual, isIncome: e.isIncome, account: e.account, note: e.note)
+        context.insert(copy)
+        try? context.save()
+        BudgetService.evaluate(after: copy)
+        return copy
     }
 
     // MARK: Queries used by intents

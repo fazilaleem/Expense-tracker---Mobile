@@ -87,4 +87,31 @@ final class TransactionParserTests: XCTestCase {
         XCTAssertEqual(Categorizer.categorize(merchant: "Netflix.Com", text: nil, isIncome: false), .subscriptions)
         XCTAssertEqual(Categorizer.categorize(merchant: "Coca-Cola Arena", text: nil, isIncome: false), .other)
     }
+
+    func testBudgetPeriodIntervals() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        cal.firstWeekday = 2
+        let date = ISO8601DateFormatter().date(from: "2026-11-06T15:30:00Z")!
+        let day = BudgetPeriod.daily.interval(containing: date, calendar: cal)
+        XCTAssertEqual(day.duration, 86_400)
+        let month = BudgetPeriod.monthly.interval(containing: date, calendar: cal)
+        XCTAssertEqual(cal.component(.day, from: month.start), 1)
+        XCTAssertEqual(month.duration, 30 * 86_400)
+        let week = BudgetPeriod.weekly.interval(containing: date, calendar: cal)
+        XCTAssertEqual(week.duration, 7 * 86_400)
+        XCTAssertTrue(week.contains(date))
+        // Same key inside a period, different key in the next one.
+        let later = date.addingTimeInterval(3600)
+        XCTAssertEqual(BudgetPeriod.daily.key(for: date, calendar: cal), BudgetPeriod.daily.key(for: later, calendar: cal))
+        XCTAssertNotEqual(BudgetPeriod.daily.key(for: date, calendar: cal),
+                          BudgetPeriod.daily.key(for: date.addingTimeInterval(86_400), calendar: cal))
+    }
+
+    func testBudgetStatusLevels() {
+        let i = DateInterval(start: .now, duration: 86_400)
+        XCTAssertEqual(BudgetStatus(spent: 50, limit: 100, warnAt: 0.8, interval: i).level, .ok)
+        XCTAssertEqual(BudgetStatus(spent: 85, limit: 100, warnAt: 0.8, interval: i).level, .warning)
+        XCTAssertEqual(BudgetStatus(spent: 100, limit: 100, warnAt: 0.8, interval: i).level, .exceeded)
+    }
 }

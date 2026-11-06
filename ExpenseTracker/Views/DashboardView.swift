@@ -5,10 +5,11 @@ import Charts
 struct DashboardView: View {
     @Query(sort: \Expense.date, order: .reverse) private var allExpenses: [Expense]
     @AppStorage(SettingsKey.defaultCurrency) private var currency = AppSettings.defaultCurrency
-    @AppStorage(SettingsKey.monthlyBudget) private var budget: Double = 0
+    @Query(sort: \Budget.createdAt) private var budgets: [Budget]
     @State private var month = Calendar.current.startOfMonth(for: .now)
     @State private var showingAdd = UserDefaults.standard.bool(forKey: "demoShowAdd")
     @State private var showingSetup = false
+    @State private var showingPaste = false
     @State private var selectedAngle: Double?
 
     private let cal = Calendar.current
@@ -77,6 +78,30 @@ struct DashboardView: View {
 
     private var reviewCount: Int { allExpenses.filter(\.needsReview).count }
 
+    /// Overall monthly budget drives the hero progress bar.
+    private var budget: Double {
+        budgets.first { $0.categoryRaw == nil && $0.period == .monthly && $0.isEnabled && $0.currency == currency }?.limit ?? 0
+    }
+
+    /// Budgets at or above their warning level right now.
+    private var atRisk: [(budget: Budget, status: BudgetStatus)] {
+        budgets.filter(\.isEnabled)
+            .map { (budget: $0, status: BudgetService.status(of: $0, in: allExpenses)) }
+            .filter { $0.status.level != .ok }
+            .sorted { $0.status.ratio > $1.status.ratio }
+    }
+
+    /// Change vs the same number of days last month (e.g. 1–6 Oct vs 1–6 Nov).
+    private var vsLastMonth: Double? {
+        guard let prevStart = cal.date(byAdding: .month, value: -1, to: month) else { return nil }
+        let elapsed = isCurrentMonth ? Date.now.timeIntervalSince(month) : monthEnd.timeIntervalSince(month)
+        let prevEnd = min(prevStart.addingTimeInterval(elapsed), month)
+        let prev = allExpenses.filter { !$0.isIncome && $0.currency == currency && $0.date >= prevStart && $0.date < prevEnd }
+            .reduce(0) { $0 + $1.amount }
+        guard prev > 0 else { return nil }
+        return (total - prev) / prev
+    }
+
     // MARK: Body
 
     var body: some View {
@@ -87,6 +112,7 @@ struct DashboardView: View {
                     monthSwitcher.appearAnimation()
                     heroCard.appearAnimation(delay: 0.05)
                     if isCurrentMonth { quickStats.appearAnimation(delay: 0.1) }
+                    if isCurrentMonth && !atRisk.isEmpty { budgetAlertCard.appearAnimation(delay: 0.11) }
                     if reviewCount > 0 { reviewBanner.appearAnimation(delay: 0.12) }
 
                     if spending.isEmpty {
@@ -114,16 +140,11 @@ struct DashboardView: View {
             .navigationTitle("Overview")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showingAdd = true } label: {
-                        Image(systemName: "plus")
-                            .font(.body.weight(.semibold))
-                            .frame(width: 34, height: 34)
-                            .background(Theme.emeraldSoft, in: Circle())
-                    }
-                    .accessibilityLabel("Add expense")
+                    AddMenu(showingAdd: $showingAdd, showingPaste: $showingPaste)
                 }
             }
             .sheet(isPresented: $showingAdd) { ExpenseEditView(expense: nil) }
+            .sheet(isPresented: $showingPaste) { ParseTestView(isSheet: true) }
             .sheet(isPresented: $showingSetup) {
                 NavigationStack { SetupGuideView() }
             }
@@ -191,6 +212,10 @@ struct DashboardView: View {
 
             HStack(spacing: 8) {
                 heroChip("\(spending.count) transactions", symbol: "list.bullet")
+                if let change = vsLastMonth {
+                    heroChip("\(change >= 0 ? "+" : "−")\(Int((abs(change) * 100).rounded()))% vs last month",
+                             symbol: change >= 0 ? "arrow.up.right" : "arrow.down.right")
+                }
                 if income > 0 {
                     heroChip("+\(Formatters.compactMoney(income, currency)) in", symbol: "arrow.down.left")
                 }
@@ -251,6 +276,29 @@ struct DashboardView: View {
             StatTile(title: "Daily avg", value: Formatters.compactMoney(dailyAverage, currency),
                      symbol: "chart.line.uptrend.xyaxis", color: Theme.emerald)
         }
+    }
+
+    private var budgetAlertCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Budget alerts", systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(atRisk.contains { $0.status.level == .exceeded } ? Theme.danger : Theme.warning)
+                Spacer()
+            }
+            ForEach(atRisk.prefix(3), id: \.budget.id) { item in
+                HStack(spacing: 10) {
+                    IconTile(symbol: item.budget.symbol, color: item.budget.category?.color ?? Theme.emerald, size: 28)
+                    Text("\(item.budget.category?.shortName ?? "Overall") · \(item.budget.period.label)")
+                        .font(.subheadline)
+                    Spacer()
+                    Text("\(Int((item.status.ratio * 100).rounded()))%")
+                        .font(.subheadline.weight(.bold)).monospacedDigit()
+                        .foregroundStyle(item.status.level.color)
+                }
+            }
+        }
+        .card(padding: 14)
     }
 
     private var reviewBanner: some View {

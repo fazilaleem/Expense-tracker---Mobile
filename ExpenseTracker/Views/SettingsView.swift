@@ -5,7 +5,8 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Expense.date) private var expenses: [Expense]
     @AppStorage(SettingsKey.defaultCurrency) private var currency = AppSettings.defaultCurrency
-    @AppStorage(SettingsKey.monthlyBudget) private var budget: Double = 0
+    @AppStorage(SettingsKey.budgetAlerts) private var budgetAlerts = true
+    @AppStorage(SettingsKey.appLock) private var appLock = false
     @AppStorage(SettingsKey.notifyOnLog) private var notifyOnLog = true
     @AppStorage(SettingsKey.mergeDuplicates) private var mergeDuplicates = true
     @AppStorage(SettingsKey.ignoreIncome) private var ignoreIncome = false
@@ -35,6 +36,11 @@ struct SettingsView: View {
                     } label: {
                         row("Automation setup", symbol: "wand.and.stars", color: Theme.emerald)
                     }
+                    NavigationLink {
+                        ParseTestView()
+                    } label: {
+                        row("Paste & test a bank SMS", symbol: "doc.on.clipboard.fill", color: Color(light: 0x6366F1, dark: 0x818CF8))
+                    }
                 } footer: {
                     Text("iOS doesn't let apps read SMS or notifications directly, so recording runs through Shortcuts automations. Setup takes about 3 minutes.")
                 }
@@ -46,13 +52,11 @@ struct SettingsView: View {
                     } label: {
                         row("Main currency", symbol: "coloncurrencysign.circle.fill", color: Color(light: 0x3B82F6, dark: 0x60A5FA))
                     }
-                    HStack {
-                        row("Monthly budget", symbol: "target", color: Color(light: 0xF97316, dark: 0xFB923C))
-                        Spacer()
-                        TextField("None", value: $budget, format: .number)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(maxWidth: 120)
+                    Toggle(isOn: $budgetAlerts) {
+                        row("Budget alerts", symbol: "target", color: Color(light: 0xF97316, dark: 0xFB923C))
+                    }
+                    Toggle(isOn: $appLock) {
+                        row("Lock with Face ID", symbol: "faceid", color: Color(light: 0x0F766E, dark: 0x2DD4BF))
                     }
                     Toggle(isOn: $notifyOnLog) {
                         row("Confirm auto-recorded", symbol: "bell.badge.fill", color: Color(light: 0xEF4444, dark: 0xF87171))
