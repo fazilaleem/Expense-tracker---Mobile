@@ -4,9 +4,10 @@ import SwiftData
 @main
 struct ExpenseTrackerApp: App {
     init() {
+        let underTest = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
         if DemoData.isEnabled {
             DemoData.seedIfNeeded()
-        } else {
+        } else if !underTest {
             NotificationService.requestAuthorization()
         }
         ExpenseShortcuts.updateAppShortcutParameters()

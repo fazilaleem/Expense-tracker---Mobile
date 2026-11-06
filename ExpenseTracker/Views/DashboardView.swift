@@ -7,7 +7,7 @@ struct DashboardView: View {
     @AppStorage(SettingsKey.defaultCurrency) private var currency = AppSettings.defaultCurrency
     @AppStorage(SettingsKey.monthlyBudget) private var budget: Double = 0
     @State private var month = Calendar.current.startOfMonth(for: .now)
-    @State private var showingAdd = false
+    @State private var showingAdd = UserDefaults.standard.bool(forKey: "demoShowAdd")
     @State private var showingSetup = false
     @State private var selectedAngle: Double?
 
@@ -81,6 +81,7 @@ struct DashboardView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 16) {
                     monthSwitcher.appearAnimation()
@@ -91,16 +92,24 @@ struct DashboardView: View {
                     if spending.isEmpty {
                         emptyState.appearAnimation(delay: 0.15)
                     } else {
-                        categoryCard.appearAnimation(delay: 0.15)
+                        categoryCard.appearAnimation(delay: 0.15).id("categories")
                         if byDay.count > 1 { trendCard.appearAnimation(delay: 0.2) }
                         recentCard.appearAnimation(delay: 0.25)
                     }
+                    Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
                 .animation(.snappy, value: month)
             }
             .scrollIndicators(.hidden)
+            .task {
+                // Screenshot helper: `-demoScrollTo categories|bottom`.
+                guard let target = UserDefaults.standard.string(forKey: "demoScrollTo") else { return }
+                try? await Task.sleep(for: .seconds(1.2))
+                withAnimation { proxy.scrollTo(target, anchor: target == "bottom" ? .bottom : .top) }
+            }
+            }
             .themedBackground()
             .navigationTitle("Overview")
             .toolbar {
@@ -473,12 +482,9 @@ struct ExpenseRow: View {
                 Text(expense.merchant)
                     .font(.body.weight(.semibold))
                     .lineLimit(1)
-                HStack(spacing: 5) {
+                HStack(spacing: 4) {
                     Image(systemName: expense.source.symbol).font(.caption2)
-                    Text(expense.category.shortName)
-                    Text("·")
-                    Text(expense.date.formatted(date: .omitted, time: .shortened))
-                    if let acc = expense.account { Text("· ••\(acc)") }
+                    Text("\(expense.category.shortName) · \(expense.date.formatted(date: .omitted, time: .shortened))")
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
