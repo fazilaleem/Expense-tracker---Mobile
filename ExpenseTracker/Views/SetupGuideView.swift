@@ -4,8 +4,12 @@ struct SetupGuideView: View {
     var body: some View {
         List {
             Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Image(systemName: "wand.and.stars").font(.largeTitle).foregroundStyle(.tint)
+                VStack(alignment: .leading, spacing: 10) {
+                    Image("AppLogo")
+                        .resizable()
+                        .frame(width: 64, height: 64)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .shadow(color: Theme.emerald.opacity(0.3), radius: 10, y: 5)
                     Text("Automatic expense tracking").font(.title2.bold())
                     Text("Apple doesn't allow any app to read your SMS or notifications directly. Instead, the built-in **Shortcuts** app can hand each bank message or Apple Pay payment to Expenses automatically, with no tapping needed.")
                         .font(.subheadline).foregroundStyle(.secondary)
@@ -47,6 +51,8 @@ struct SetupGuideView: View {
                 Label("Other ways", systemImage: "lightbulb.fill")
             }
         }
+        .scrollContentBackground(.hidden)
+        .themedBackground()
         .navigationTitle("Setup guide")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -65,7 +71,7 @@ private struct Step: View {
                 .font(.caption.bold())
                 .foregroundStyle(.white)
                 .frame(width: 22, height: 22)
-                .background(Circle().fill(.tint))
+                .background(Circle().fill(Theme.emerald.gradient))
             Text(text).font(.subheadline)
         }
         .padding(.vertical, 2)

@@ -6,16 +6,26 @@ struct DashboardView: View {
     @Query(sort: \Expense.date, order: .reverse) private var allExpenses: [Expense]
     @AppStorage(SettingsKey.defaultCurrency) private var currency = AppSettings.defaultCurrency
     @AppStorage(SettingsKey.monthlyBudget) private var budget: Double = 0
-    @State private var month = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: .now))!
+    @State private var month = Calendar.current.startOfMonth(for: .now)
     @State private var showingAdd = false
+    @State private var showingSetup = false
+    @State private var selectedAngle: Double?
+
+    private let cal = Calendar.current
+
+    // MARK: Derived data
+
+    private var monthEnd: Date { cal.date(byAdding: .month, value: 1, to: month)! }
+    private var isCurrentMonth: Bool { cal.isDate(month, equalTo: .now, toGranularity: .month) }
 
     private var monthExpenses: [Expense] {
-        let end = Calendar.current.date(byAdding: .month, value: 1, to: month)!
-        return allExpenses.filter { $0.date >= month && $0.date < end }
+        allExpenses.filter { $0.date >= month && $0.date < monthEnd }
     }
     private var spending: [Expense] { monthExpenses.filter { !$0.isIncome && $0.currency == currency } }
     private var total: Double { spending.reduce(0) { $0 + $1.amount } }
-    private var income: Double { monthExpenses.filter { $0.isIncome && $0.currency == currency }.reduce(0) { $0 + $1.amount } }
+    private var income: Double {
+        monthExpenses.filter { $0.isIncome && $0.currency == currency }.reduce(0) { $0 + $1.amount }
+    }
 
     private var otherCurrencyTotals: [(key: String, value: Double)] {
         Dictionary(grouping: monthExpenses.filter { !$0.isIncome && $0.currency != currency }, by: \.currency)
@@ -25,83 +35,212 @@ struct DashboardView: View {
 
     private var byCategory: [CategoryTotal] {
         Dictionary(grouping: spending, by: \.category)
-            .map { CategoryTotal(category: $0.key, total: $0.value.reduce(0) { $0 + $1.amount }) }
+            .map { CategoryTotal(category: $0.key, total: $0.value.reduce(0) { $0 + $1.amount }, count: $0.value.count) }
             .sorted { $0.total > $1.total }
     }
 
     private var byDay: [DayTotal] {
-        Dictionary(grouping: spending) { Calendar.current.startOfDay(for: $0.date) }
-            .map { DayTotal(day: $0.key, total: $0.value.reduce(0) { $0 + $1.amount }) }
-            .sorted { $0.day < $1.day }
+        let grouped = Dictionary(grouping: spending) { cal.startOfDay(for: $0.date) }
+            .mapValues { $0.reduce(0) { $0 + $1.amount } }
+        // Fill every day so the chart has a continuous axis.
+        let lastDay = isCurrentMonth ? cal.startOfDay(for: .now) : cal.date(byAdding: .day, value: -1, to: monthEnd)!
+        var days: [DayTotal] = []
+        var d = month
+        while d <= lastDay {
+            days.append(DayTotal(day: d, total: grouped[d] ?? 0))
+            d = cal.date(byAdding: .day, value: 1, to: d)!
+        }
+        return days
+    }
+
+    private var todayTotal: Double {
+        spending.filter { cal.isDateInToday($0.date) }.reduce(0) { $0 + $1.amount }
+    }
+    private var weekTotal: Double {
+        guard let week = cal.dateInterval(of: .weekOfYear, for: .now) else { return 0 }
+        return spending.filter { week.contains($0.date) }.reduce(0) { $0 + $1.amount }
+    }
+    private var dailyAverage: Double {
+        let days = max(byDay.count, 1)
+        return total / Double(days)
+    }
+
+    private var selectedCategory: CategoryTotal? {
+        guard let angle = selectedAngle else { return nil }
+        var running = 0.0
+        for item in byCategory {
+            running += item.total
+            if angle <= running { return item }
+        }
+        return nil
     }
 
     private var reviewCount: Int { allExpenses.filter(\.needsReview).count }
+
+    // MARK: Body
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    monthPicker
-                    summaryCard
-                    if reviewCount > 0 { reviewBanner }
-                    if !byCategory.isEmpty { categoryCard }
-                    if byDay.count > 1 { dailyCard }
-                    recentCard
+                    monthSwitcher.appearAnimation()
+                    heroCard.appearAnimation(delay: 0.05)
+                    if isCurrentMonth { quickStats.appearAnimation(delay: 0.1) }
+                    if reviewCount > 0 { reviewBanner.appearAnimation(delay: 0.12) }
+
+                    if spending.isEmpty {
+                        emptyState.appearAnimation(delay: 0.15)
+                    } else {
+                        categoryCard.appearAnimation(delay: 0.15)
+                        if byDay.count > 1 { trendCard.appearAnimation(delay: 0.2) }
+                        recentCard.appearAnimation(delay: 0.25)
+                    }
                 }
-                .padding()
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
+                .animation(.snappy, value: month)
             }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("Expenses")
+            .scrollIndicators(.hidden)
+            .themedBackground()
+            .navigationTitle("Overview")
             .toolbar {
-                Button { showingAdd = true } label: { Image(systemName: "plus.circle.fill") }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showingAdd = true } label: {
+                        Image(systemName: "plus")
+                            .font(.body.weight(.semibold))
+                            .frame(width: 34, height: 34)
+                            .background(Theme.emeraldSoft, in: Circle())
+                    }
+                    .accessibilityLabel("Add expense")
+                }
             }
             .sheet(isPresented: $showingAdd) { ExpenseEditView(expense: nil) }
+            .sheet(isPresented: $showingSetup) {
+                NavigationStack { SetupGuideView() }
+            }
+            .sensoryFeedback(.selection, trigger: month)
         }
     }
 
-    private var monthPicker: some View {
-        HStack {
-            Button { shift(-1) } label: { Image(systemName: "chevron.left") }
+    // MARK: Sections
+
+    private var monthSwitcher: some View {
+        HStack(spacing: 12) {
+            Button { shift(-1) } label: {
+                Image(systemName: "chevron.left").frame(width: 36, height: 36)
+            }
             Spacer()
-            Text(month.formatted(.dateTime.month(.wide).year())).font(.headline)
+            VStack(spacing: 0) {
+                Text(month.formatted(.dateTime.month(.wide)))
+                    .font(.headline)
+                    .contentTransition(.numericText())
+                Text(month.formatted(.dateTime.year()))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Spacer()
-            Button { shift(1) } label: { Image(systemName: "chevron.right") }
-                .disabled(Calendar.current.isDate(month, equalTo: .now, toGranularity: .month))
+            Button { shift(1) } label: {
+                Image(systemName: "chevron.right").frame(width: 36, height: 36)
+            }
+            .disabled(isCurrentMonth)
         }
-        .padding(.horizontal, 4)
+        .font(.body.weight(.semibold))
+        .padding(4)
+        .background(Theme.card, in: Capsule())
+        .overlay(Capsule().strokeBorder(Theme.cardStroke))
     }
 
     private func shift(_ by: Int) {
-        month = Calendar.current.date(byAdding: .month, value: by, to: month)!
+        selectedAngle = nil
+        month = cal.date(byAdding: .month, value: by, to: month)!
     }
 
-    private var summaryCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Spent").font(.subheadline).foregroundStyle(.secondary)
-                Text(Formatters.money(total, currency))
-                    .font(.system(size: 38, weight: .bold, design: .rounded))
-                    .minimumScaleFactor(0.5)
-                if !otherCurrencyTotals.isEmpty {
-                    Text("+ " + otherCurrencyTotals.map { Formatters.money($0.value, $0.key) }.joined(separator: " + "))
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                if budget > 0 {
-                    let ratio = total / budget
-                    ProgressView(value: min(ratio, 1))
-                        .tint(ratio > 1 ? .red : ratio > 0.8 ? .orange : .accentColor)
-                    Text(ratio > 1
-                         ? "Over budget by \(Formatters.money(total - budget, currency))"
-                         : "\(Formatters.money(budget - total, currency)) left of \(Formatters.compactMoney(budget, currency)) budget")
-                        .font(.footnote).foregroundStyle(ratio > 1 ? .red : .secondary)
-                }
-                if income > 0 {
-                    Label("Income \(Formatters.money(income, currency))", systemImage: "arrow.down.circle")
-                        .font(.footnote).foregroundStyle(.green)
-                }
-                Text("\(spending.count) transactions").font(.caption).foregroundStyle(.secondary)
+    private var heroCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(isCurrentMonth ? "Spent this month" : "Spent in \(month.formatted(.dateTime.month(.wide)))")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.8))
+                Spacer()
+                Image(systemName: "wallet.pass.fill")
+                    .foregroundStyle(.white.opacity(0.5))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(Formatters.money(total, currency))
+                .font(.system(size: 40, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .contentTransition(.numericText(value: total))
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+
+            if !otherCurrencyTotals.isEmpty {
+                Text("+ " + otherCurrencyTotals.map { Formatters.money($0.value, $0.key) }.joined(separator: "  + "))
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+
+            if budget > 0 { budgetBar }
+
+            HStack(spacing: 8) {
+                heroChip("\(spending.count) transactions", symbol: "list.bullet")
+                if income > 0 {
+                    heroChip("+\(Formatters.compactMoney(income, currency)) in", symbol: "arrow.down.left")
+                }
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            ZStack(alignment: .topTrailing) {
+                Theme.heroGradient
+                Circle().fill(.white.opacity(0.08)).frame(width: 220, height: 220).offset(x: 70, y: -90)
+                Circle().fill(.white.opacity(0.06)).frame(width: 140, height: 140).offset(x: -10, y: 120)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .shadow(color: Color(hex: 0x047857).opacity(0.3), radius: 18, y: 10)
+    }
+
+    private var budgetBar: some View {
+        let ratio = budget > 0 ? total / budget : 0
+        return VStack(alignment: .leading, spacing: 6) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.2))
+                    Capsule()
+                        .fill(ratio > 1 ? Color(hex: 0xFCA5A5) : .white)
+                        .frame(width: geo.size.width * min(ratio, 1))
+                        .animation(.spring(response: 0.7, dampingFraction: 0.8), value: ratio)
+                }
+            }
+            .frame(height: 8)
+            HStack {
+                Text(ratio > 1
+                     ? "Over by \(Formatters.money(total - budget, currency))"
+                     : "\(Formatters.money(budget - total, currency)) left")
+                Spacer()
+                Text("\(Int((ratio * 100).rounded()))% of \(Formatters.compactMoney(budget, currency))")
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.white.opacity(0.85))
+        }
+    }
+
+    private func heroChip(_ text: String, symbol: String) -> some View {
+        Label(text, systemImage: symbol)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(.white.opacity(0.16), in: Capsule())
+    }
+
+    private var quickStats: some View {
+        HStack(spacing: 12) {
+            StatTile(title: "Today", value: Formatters.compactMoney(todayTotal, currency),
+                     symbol: "sun.max.fill", color: Color(light: 0xF59E0B, dark: 0xFBBF24))
+            StatTile(title: "This week", value: Formatters.compactMoney(weekTotal, currency),
+                     symbol: "calendar", color: Color(light: 0x3B82F6, dark: 0x60A5FA))
+            StatTile(title: "Daily avg", value: Formatters.compactMoney(dailyAverage, currency),
+                     symbol: "chart.line.uptrend.xyaxis", color: Theme.emerald)
         }
     }
 
@@ -109,81 +248,143 @@ struct DashboardView: View {
         NavigationLink {
             TransactionsView(onlyReview: true)
         } label: {
-            Card {
-                HStack {
-                    Image(systemName: "exclamationmark.bubble.fill").foregroundStyle(.orange)
-                    Text("\(reviewCount) transaction\(reviewCount == 1 ? "" : "s") need a quick review")
-                    Spacer()
-                    Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+            HStack(spacing: 12) {
+                IconTile(symbol: "sparkle.magnifyingglass", color: Theme.warning, size: 36)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(reviewCount) to review").font(.subheadline.weight(.semibold))
+                    Text("Auto-recorded entries the parser wasn't sure about")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
             }
+            .card(padding: 14)
         }
         .buttonStyle(.plain)
     }
 
     private var categoryCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("By category").font(.headline)
+        VStack(alignment: .leading, spacing: 16) {
+            SectionTitle(title: "Where it went", trailing: "\(byCategory.count) categories")
+
+            ZStack {
                 Chart(byCategory) { item in
-                    SectorMark(angle: .value("Amount", item.total), innerRadius: .ratio(0.62), angularInset: 1.5)
+                    SectorMark(angle: .value("Amount", item.total),
+                               innerRadius: .ratio(0.66),
+                               outerRadius: .ratio(selectedCategory?.id == item.id ? 1.0 : 0.92),
+                               angularInset: 2)
                         .foregroundStyle(item.category.color)
-                        .cornerRadius(3)
+                        .cornerRadius(5)
+                        .opacity(selectedCategory == nil || selectedCategory?.id == item.id ? 1 : 0.35)
                 }
-                .frame(height: 190)
-                ForEach(byCategory) { item in
-                    HStack {
-                        Image(systemName: item.category.symbol)
-                            .foregroundStyle(item.category.color).frame(width: 24)
-                        Text(item.category.rawValue)
-                        Spacer()
-                        Text(Formatters.money(item.total, currency)).monospacedDigit()
-                        Text("\(Int((item.total / max(total, 0.01) * 100).rounded()))%")
-                            .font(.caption).foregroundStyle(.secondary).frame(width: 38, alignment: .trailing)
+                .chartAngleSelection(value: $selectedAngle)
+                .chartLegend(.hidden)
+                .frame(height: 210)
+                .animation(.snappy, value: selectedCategory?.id)
+
+                VStack(spacing: 2) {
+                    if let sel = selectedCategory {
+                        Image(systemName: sel.category.symbol).foregroundStyle(sel.category.color)
+                        Text(sel.category.shortName).font(.caption).foregroundStyle(.secondary)
+                        Text(Formatters.compactMoney(sel.total, currency))
+                            .font(.title3.weight(.bold)).contentTransition(.numericText(value: sel.total))
+                    } else {
+                        Text("Total").font(.caption).foregroundStyle(.secondary)
+                        Text(Formatters.compactMoney(total, currency)).font(.title3.weight(.bold))
                     }
-                    .font(.subheadline)
+                }
+                .allowsHitTesting(false)
+            }
+            .sensoryFeedback(.selection, trigger: selectedCategory?.id)
+
+            VStack(spacing: 14) {
+                ForEach(byCategory) { item in
+                    CategoryBarRow(item: item, share: item.total / max(total, 0.01), currency: currency)
                 }
             }
         }
+        .card()
     }
 
-    private var dailyCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Daily spending").font(.headline)
-                Chart(byDay) { item in
-                    BarMark(x: .value("Day", item.day, unit: .day), y: .value("Amount", item.total))
-                        .foregroundStyle(Color.accentColor.gradient)
-                        .cornerRadius(3)
+    private var trendCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionTitle(title: "Daily spending", trailing: "avg \(Formatters.compactMoney(dailyAverage, currency))")
+            Chart {
+                ForEach(byDay) { item in
+                    BarMark(x: .value("Day", item.day, unit: .day), y: .value("Amount", item.total), width: .ratio(0.6))
+                        .foregroundStyle(cal.isDateInToday(item.day)
+                                         ? AnyShapeStyle(Theme.emerald)
+                                         : AnyShapeStyle(Theme.emerald.opacity(0.35)))
+                        .cornerRadius(4)
                 }
-                .frame(height: 160)
+                RuleMark(y: .value("Average", dailyAverage))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                    .foregroundStyle(.secondary)
             }
+            .chartYAxis {
+                AxisMarks(position: .leading) { _ in
+                    AxisGridLine().foregroundStyle(Theme.cardStroke)
+                    AxisValueLabel()
+                }
+            }
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .day, count: 7)) { _ in
+                    AxisValueLabel(format: .dateTime.day())
+                }
+            }
+            .frame(height: 170)
         }
+        .card()
     }
 
     private var recentCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Recent").font(.headline).padding(.bottom, 4)
-                if monthExpenses.isEmpty {
-                    ContentUnavailableView("No transactions yet",
-                                           systemImage: "tray",
-                                           description: Text("Set up the Shortcuts automations in Settings ▸ Setup guide, or tap + to add one."))
-                } else {
-                    ForEach(monthExpenses.prefix(6)) { e in
-                        NavigationLink { ExpenseEditView(expense: e) } label: { ExpenseRow(expense: e) }
-                            .buttonStyle(.plain)
-                        Divider()
-                    }
+        VStack(alignment: .leading, spacing: 6) {
+            SectionTitle(title: "Recent")
+                .padding(.bottom, 4)
+            ForEach(Array(monthExpenses.prefix(5).enumerated()), id: \.element.id) { index, e in
+                NavigationLink { ExpenseEditView(expense: e) } label: { ExpenseRow(expense: e) }
+                    .buttonStyle(.plain)
+                if index < min(monthExpenses.count, 5) - 1 {
+                    Divider().padding(.leading, 56)
                 }
             }
         }
+        .card()
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Image("AppLogo")
+                .resizable()
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .shadow(color: Theme.emerald.opacity(0.3), radius: 12, y: 6)
+            Text(isCurrentMonth ? "No spending yet this month" : "Nothing recorded this month")
+                .font(.headline)
+            Text("Connect your bank SMS and Apple Pay once, and every purchase is recorded automatically.")
+                .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            HStack(spacing: 10) {
+                Button { showingSetup = true } label: {
+                    Label("Set up automation", systemImage: "wand.and.stars")
+                }
+                .buttonStyle(.borderedProminent)
+                Button { showingAdd = true } label: { Label("Add", systemImage: "plus") }
+                    .buttonStyle(.bordered)
+            }
+            .controlSize(.regular)
+        }
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .card(padding: 22)
     }
 }
+
+// MARK: - Supporting views & models
 
 struct CategoryTotal: Identifiable {
     let category: ExpenseCategory
     let total: Double
+    let count: Int
     var id: ExpenseCategory { category }
 }
 
@@ -193,44 +394,109 @@ struct DayTotal: Identifiable {
     var id: Date { day }
 }
 
-struct Card<Content: View>: View {
-    @ViewBuilder var content: Content
+struct StatTile: View {
+    let title: String
+    let value: String
+    let symbol: String
+    let color: Color
     var body: some View {
-        content
-            .padding()
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        VStack(alignment: .leading, spacing: 10) {
+            IconTile(symbol: symbol, color: color, size: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.system(.subheadline, design: .rounded).weight(.bold))
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                    .contentTransition(.numericText())
+                Text(title).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .card(padding: 14)
     }
 }
 
+private struct CategoryBarRow: View {
+    let item: CategoryTotal
+    let share: Double
+    let currency: String
+    @State private var animatedShare: Double = 0
+
+    var body: some View {
+        HStack(spacing: 12) {
+            IconTile(symbol: item.category.symbol, color: item.category.color, size: 36)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(item.category.rawValue).font(.subheadline.weight(.medium))
+                    Spacer()
+                    Text(Formatters.money(item.total, currency))
+                        .font(.subheadline.weight(.semibold)).monospacedDigit()
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(item.category.color.opacity(0.12))
+                        Capsule().fill(item.category.color.gradient)
+                            .frame(width: max(6, geo.size.width * animatedShare))
+                    }
+                }
+                .frame(height: 6)
+                HStack {
+                    Text("\(item.count) transaction\(item.count == 1 ? "" : "s")")
+                    Spacer()
+                    Text("\(Int((share * 100).rounded()))%")
+                }
+                .font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.8, dampingFraction: 0.85).delay(0.15)) { animatedShare = share }
+        }
+        .onChange(of: share) { _, new in
+            withAnimation(.snappy) { animatedShare = new }
+        }
+    }
+}
+
+/// Shared transaction row used on the dashboard and in the list.
 struct ExpenseRow: View {
     let expense: Expense
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: expense.category.symbol)
-                .font(.body)
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(expense.category.color.gradient, in: Circle())
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(expense.merchant).font(.body.weight(.medium)).lineLimit(1)
-                    if expense.needsReview {
-                        Image(systemName: "exclamationmark.circle.fill").font(.caption).foregroundStyle(.orange)
-                    }
+            ZStack(alignment: .bottomTrailing) {
+                IconTile(symbol: expense.category.symbol, color: expense.category.color, size: 44)
+                if expense.needsReview {
+                    Circle().fill(Theme.warning)
+                        .frame(width: 12, height: 12)
+                        .overlay(Circle().strokeBorder(Theme.card, lineWidth: 2))
+                        .offset(x: 3, y: 3)
                 }
-                HStack(spacing: 4) {
-                    Image(systemName: expense.source.symbol)
-                    Text(expense.date.formatted(date: .abbreviated, time: .shortened))
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(expense.merchant)
+                    .font(.body.weight(.semibold))
+                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    Image(systemName: expense.source.symbol).font(.caption2)
+                    Text(expense.category.shortName)
+                    Text("·")
+                    Text(expense.date.formatted(date: .omitted, time: .shortened))
                     if let acc = expense.account { Text("· ••\(acc)") }
                 }
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
             }
-            Spacer()
-            Text((expense.isIncome ? "+" : "") + Formatters.money(expense.amount, expense.currency))
-                .font(.body.weight(.semibold)).monospacedDigit()
-                .foregroundStyle(expense.isIncome ? .green : .primary)
+            Spacer(minLength: 8)
+            Text((expense.isIncome ? "+" : "−") + Formatters.money(expense.amount, expense.currency))
+                .font(.system(.body, design: .rounded).weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(expense.isIncome ? Theme.income : .primary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
         .contentShape(Rectangle())
+    }
+}
+
+extension Calendar {
+    func startOfMonth(for date: Date) -> Date {
+        self.date(from: dateComponents([.year, .month], from: date))!
     }
 }

@@ -5,10 +5,17 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write   # to publish UI screenshots to the `screenshots` branch
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -18,14 +25,25 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      - name: Pick and boot simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)['devices']
+          c=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')]
+          pro=[x for x in c if x['name'].endswith('Pro')]
+          print((pro or c)[-1]['udid'])")
+          echo "UDID=$UDID" >> $GITHUB_ENV
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+
       - name: Run unit tests
         run: |
-          SIM=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [0-9]+( Pro)?' )
-          echo "Using simulator: $SIM"
           xcodebuild test \
             -project ExpenseTracker.xcodeproj \
             -scheme ExpenseTracker \
-            -destination "platform=iOS Simulator,name=$SIM" \
+            -destination "id=$UDID" \
+            -derivedDataPath simbuild \
             CODE_SIGNING_ALLOWED=NO | xcbeautify || exit ${PIPESTATUS[0]}
 
       - name: Build unsigned app for iPhone
@@ -51,3 +69,49 @@ jobs:
           name: ExpenseTracker-ipa
           path: ExpenseTracker.ipa
           retention-days: 30
+
+      - name: UI screenshots (demo data, light + dark)
+        continue-on-error: true
+        run: |
+          APP=com.personal.expensetracker
+          mkdir -p shots
+          xcrun simctl install "$UDID" simbuild/Build/Products/Debug-iphonesimulator/ExpenseTracker.app
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
+          names=(overview transactions paste settings)
+          for mode in light dark; do
+            xcrun simctl ui "$UDID" appearance $mode
+            for t in 0 1 2 3; do
+              xcrun simctl terminate "$UDID" $APP 2>/dev/null || true
+              xcrun simctl launch "$UDID" $APP -seedDemo YES -hasOnboarded YES -startTab $t \
+                -defaultCurrency AED -monthlyBudget 3000
+              sleep 5
+              xcrun simctl io "$UDID" screenshot "shots/${mode}-${t}-${names[$t]}.png"
+            done
+          done
+          # Onboarding / setup guide
+          xcrun simctl ui "$UDID" appearance light
+          xcrun simctl terminate "$UDID" $APP 2>/dev/null || true
+          xcrun simctl launch "$UDID" $APP -seedDemo YES -hasOnboarded NO -defaultCurrency AED
+          sleep 5
+          xcrun simctl io "$UDID" screenshot shots/light-4-setup.png
+          ls -la shots
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: shots
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Publish screenshots to `screenshots` branch
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        run: |
+          cd shots
+          git init -q
+          git checkout -q -b screenshots
+          git add .
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" \
+            commit -qm "UI screenshots for ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" screenshots
