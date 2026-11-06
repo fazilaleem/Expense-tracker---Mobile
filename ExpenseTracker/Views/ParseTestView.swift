@@ -106,6 +106,11 @@ struct ParseTestView: View {
                     Pill(text: p.isIncome ? "Income" : "Expense",
                          symbol: p.isIncome ? "arrow.down.left" : "arrow.up.right",
                          color: p.isIncome ? Theme.income : .secondary)
+                    if let bank = BankDetector.detect(text: text, sender: nil) {
+                        Pill(text: bank, symbol: "building.columns.fill", color: Color(light: 0x0F766E, dark: 0x2DD4BF))
+                    } else {
+                        Pill(text: "Bank: not recognised", symbol: "building.columns", color: .secondary)
+                    }
                     if let acc = p.account { Pill(text: "••\(acc)", symbol: "creditcard", color: .secondary) }
                 }
                 Button {

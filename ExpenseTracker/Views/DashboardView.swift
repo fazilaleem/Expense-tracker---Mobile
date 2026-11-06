@@ -385,7 +385,7 @@ struct DashboardView: View {
                 }
             }
             .chartXAxis {
-                AxisMarks(values: .stride(by: .day, count: 7)) { _ in
+                AxisMarks(values: .stride(by: .day, count: max(1, byDay.count / 6))) { _ in
                     AxisValueLabel(format: .dateTime.day())
                 }
             }
@@ -537,11 +537,15 @@ struct ExpenseRow: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.85)
             }
-            Spacer(minLength: 8)
+            .layoutPriority(1)
+            Spacer(minLength: 6)
             Text((expense.isIncome ? "+" : "−") + Formatters.money(expense.amount, expense.currency))
-                .font(.system(.body, design: .rounded).weight(.semibold))
+                .font(.system(.callout, design: .rounded).weight(.semibold))
                 .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize()
                 .foregroundStyle(expense.isIncome ? Theme.income : .primary)
         }
         .padding(.vertical, 6)

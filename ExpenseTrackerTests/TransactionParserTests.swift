@@ -114,4 +114,17 @@ final class TransactionParserTests: XCTestCase {
         XCTAssertEqual(BudgetStatus(spent: 85, limit: 100, warnAt: 0.8, interval: i).level, .warning)
         XCTAssertEqual(BudgetStatus(spent: 100, limit: 100, warnAt: 0.8, interval: i).level, .exceeded)
     }
+
+    func testBankDetection() {
+        XCTAssertEqual(BankDetector.detect(text: "Rs 500 debited", sender: "AD-HDFCBK"), "HDFC Bank")
+        XCTAssertEqual(BankDetector.detect(text: "Rs 500 debited", sender: "VM-SBIINB-S"), "SBI")
+        XCTAssertEqual(BankDetector.detect(text: "AED 45 spent", sender: "EmiratesNBD"), "Emirates NBD")
+        XCTAssertEqual(BankDetector.detect(text: "Your ADCB card ending 1234 was used for AED 20", sender: nil), "ADCB")
+        XCTAssertEqual(BankDetector.detect(text: "PKR 900 paid from your Meezan Bank account", sender: "8079"), "Meezan Bank")
+        XCTAssertNil(BankDetector.detect(text: "AED 45 spent at Carrefour", sender: "+971501234567"))
+        XCTAssertEqual(BankDetector.fromWalletCard("Emirates NBD Visa Infinite"), "Emirates NBD")
+        XCTAssertEqual(BankDetector.fromWalletCard("My Travel Card"), "My Travel Card")
+        XCTAssertNil(BankDetector.fromWalletCard("1234"))
+        XCTAssertEqual(ExpenseStore.lastDigits("Visa ••1234"), "1234")
+    }
 }

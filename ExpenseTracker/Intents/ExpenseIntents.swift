@@ -93,6 +93,7 @@ struct AddExpenseIntent: AppIntent {
         if cat == .other { cat = Categorizer.categorize(merchant: merchant, text: nil, isIncome: false) }
         let result = ExpenseStore.save(Expense(amount: amount, currency: currency, merchant: merchant,
                                                category: cat, source: .manual))
+        NotificationService.confirm(result)
         return .result(dialog: IntentDialog(stringLiteral: result.summary))
     }
 }

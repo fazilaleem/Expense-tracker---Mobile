@@ -42,6 +42,8 @@ final class Expense {
     var isIncome: Bool = false
     /// Card / account suffix such as "1234", if found.
     var account: String?
+    /// Bank or account name, e.g. "Emirates NBD". Auto-detected when recognised, otherwise blank for manual entry.
+    var bank: String?
     /// Original SMS / notification text, kept for auditing and re-parsing.
     var rawText: String?
     var sender: String?
@@ -58,6 +60,7 @@ final class Expense {
          source: ExpenseSource,
          isIncome: Bool = false,
          account: String? = nil,
+         bank: String? = nil,
          rawText: String? = nil,
          sender: String? = nil,
          note: String? = nil,
@@ -71,6 +74,7 @@ final class Expense {
         self.sourceRaw = source.rawValue
         self.isIncome = isIncome
         self.account = account
+        self.bank = bank
         self.rawText = rawText
         self.sender = sender
         self.note = note
@@ -86,6 +90,12 @@ final class Expense {
     var source: ExpenseSource {
         get { ExpenseSource(rawValue: sourceRaw) ?? .manual }
         set { sourceRaw = newValue.rawValue }
+    }
+
+    /// "Emirates NBD ••4321", "••4321", "Emirates NBD" or nil.
+    var accountLabel: String? {
+        let parts = [bank?.isEmpty == false ? bank : nil, account.map { "••\($0)" }].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
     /// Amount signed from the point of view of spending (expenses positive).

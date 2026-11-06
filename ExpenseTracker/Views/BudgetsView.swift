@@ -206,9 +206,11 @@ struct BudgetRow: View {
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(Theme.elevated, in: Capsule())
                     Spacer()
-                    Text("\(Formatters.compactMoney(status.spent, budget.currency)) / \(Formatters.compactMoney(budget.limit, budget.currency))")
+                    Text("\(Formatters.compactMoney(status.spent, budget.currency)) / \(budget.limit.formatted(.number.precision(.fractionLength(0))))")
                         .font(.subheadline.weight(.medium))
                         .monospacedDigit()
+                        .lineLimit(1)
+                        .fixedSize()
                 }
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {

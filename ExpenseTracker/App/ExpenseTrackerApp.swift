@@ -5,6 +5,7 @@ import SwiftData
 struct ExpenseTrackerApp: App {
     init() {
         let underTest = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        NotificationService.configure()
         BudgetService.migrateLegacyMonthlyBudget()
         if DemoData.isEnabled {
             DemoData.seedIfNeeded()
@@ -27,23 +28,26 @@ struct ContentView: View {
     @AppStorage(SettingsKey.appLock) private var appLock = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var locked = UserDefaults.standard.bool(forKey: SettingsKey.appLock)
-    /// `-startTab N` launch argument picks the initial tab (used for screenshots).
-    @State private var tab = UserDefaults.standard.integer(forKey: "startTab")
+    @Bindable private var router = AppRouter.shared
+    @State private var openedExpense: Expense?
 
     var body: some View {
-        TabView(selection: $tab) {
+        TabView(selection: $router.selectedTab) {
             DashboardView()
                 .tabItem { Label("Overview", systemImage: "chart.pie.fill") }
                 .tag(0)
             TransactionsView()
                 .tabItem { Label("Transactions", systemImage: "list.bullet.rectangle") }
                 .tag(1)
+            InsightsView()
+                .tabItem { Label("Insights", systemImage: "chart.bar.xaxis") }
+                .tag(2)
             BudgetsView()
                 .tabItem { Label("Budgets", systemImage: "target") }
-                .tag(2)
+                .tag(3)
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape.fill") }
-                .tag(3)
+                .tag(4)
         }
         .tint(Theme.emerald)
         .fontDesign(.rounded)
@@ -52,6 +56,15 @@ struct ContentView: View {
                 AppLockView { withAnimation(.easeOut(duration: 0.25)) { locked = false } }
                     .transition(.opacity)
             }
+        }
+        // Notification tap → open that expense.
+        .onChange(of: router.openExpenseID) { _, id in
+            guard let id else { return }
+            openedExpense = ExpenseStore.find(id)
+            router.openExpenseID = nil
+        }
+        .sheet(item: $openedExpense) { e in
+            ExpenseEditView(expense: e, presentedAsSheet: true)
         }
         .onChange(of: scenePhase) { _, phase in
             // Lock again whenever the app goes to the background.

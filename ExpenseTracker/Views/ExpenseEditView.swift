@@ -17,6 +17,8 @@ struct ExpenseEditView: View {
     @State private var date = Date.now
     @State private var isIncome = false
     @State private var note = ""
+    @State private var bank = ""
+    @State private var account = ""
     @State private var rememberCategory = true
     @State private var loaded = false
     @State private var confirmDelete = false
@@ -122,6 +124,19 @@ struct ExpenseEditView: View {
                     }
             }
             Divider().padding(.leading, 48)
+            fieldRow(symbol: "building.columns.fill", color: Color(light: 0x0F766E, dark: 0x2DD4BF)) {
+                TextField("Bank or account (optional)", text: $bank)
+                    .textInputAutocapitalization(.words)
+                TextField("Last 4", text: $account)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 70)
+                    .onChange(of: account) { _, new in
+                        let digits = String(new.filter(\.isNumber).suffix(4))
+                        if digits != new { account = digits }
+                    }
+            }
+            Divider().padding(.leading, 48)
             fieldRow(symbol: "calendar", color: Color(light: 0x3B82F6, dark: 0x60A5FA)) {
                 DatePicker("Date", selection: $date).labelsHidden()
                 Spacer()
@@ -181,7 +196,6 @@ struct ExpenseEditView: View {
             SectionTitle(title: "Source")
             HStack(spacing: 8) {
                 Pill(text: e.source.label, symbol: e.source.symbol)
-                if let acc = e.account { Pill(text: "••\(acc)", symbol: "creditcard", color: .secondary) }
                 if let sender = e.sender { Pill(text: sender, symbol: "person", color: .secondary) }
             }
             if let raw = e.rawText {
@@ -236,6 +250,13 @@ struct ExpenseEditView: View {
         date = e.date
         isIncome = e.isIncome
         note = e.note ?? ""
+        bank = e.bank ?? ""
+        account = e.account ?? ""
+    }
+
+    private var bankValue: String? {
+        let b = bank.trimmingCharacters(in: .whitespaces)
+        return b.isEmpty ? nil : b
     }
 
     private func save() {
@@ -253,13 +274,17 @@ struct ExpenseEditView: View {
             e.date = date
             e.isIncome = isIncome
             e.note = note.isEmpty ? nil : note
+            e.bank = bankValue
+            e.account = account.isEmpty ? nil : account
             e.needsReview = false
             try? context.save()
             BudgetService.evaluate(after: e)
         } else {
-            ExpenseStore.save(Expense(amount: value, currency: currency, merchant: name.isEmpty ? "Cash" : name,
+            let result = ExpenseStore.save(Expense(amount: value, currency: currency, merchant: name.isEmpty ? "Cash" : name,
                                       category: finalCategory, date: date, source: .manual,
-                                      isIncome: isIncome, note: note.isEmpty ? nil : note))
+                                      isIncome: isIncome, account: account.isEmpty ? nil : account,
+                                      bank: bankValue, note: note.isEmpty ? nil : note))
+            NotificationService.confirm(result)
             if rememberCategory && userPickedCategory && !name.isEmpty && !isIncome && finalCategory != .other {
                 Categorizer.learn(merchant: name, category: finalCategory)
             }

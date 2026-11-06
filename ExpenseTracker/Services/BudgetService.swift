@@ -1,6 +1,5 @@
 import Foundation
 import SwiftData
-import UserNotifications
 
 @MainActor
 enum BudgetService {
@@ -43,26 +42,13 @@ enum BudgetService {
             if s.ratio >= 1, budget.lastExceededKey != key {
                 budget.lastExceededKey = key
                 budget.lastWarnedKey = key
-                notify(title: "\(budget.title) budget exceeded",
-                       body: "You've spent \(Formatters.money(s.spent, budget.currency)) of your \(budget.period.label.lowercased()) \(Formatters.money(budget.limit, budget.currency)) budget (\(Int(s.ratio * 100))%).")
+                NotificationService.postBudgetAlert(budget, status: s)
             } else if s.ratio >= budget.warnAt, s.ratio < 1, budget.lastWarnedKey != key {
                 budget.lastWarnedKey = key
-                notify(title: "\(budget.title) budget \(Int(s.ratio * 100))% used",
-                       body: "\(Formatters.money(max(s.remaining, 0), budget.currency)) left \(budget.period.noun). \(s.timeLeftText).")
+                NotificationService.postBudgetAlert(budget, status: s)
             }
         }
         try? ctx.save()
-    }
-
-    private static func notify(title: String, body: String) {
-        guard alertsEnabled else { return }
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-        content.interruptionLevel = .timeSensitive
-        UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
     }
 
     /// One-time migration of the old single "monthly budget" setting into a Budget record.

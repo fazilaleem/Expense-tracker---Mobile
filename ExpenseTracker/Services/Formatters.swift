@@ -12,7 +12,7 @@ enum Formatters {
 
 enum CSVExporter {
     static func export(_ expenses: [Expense]) -> URL {
-        var rows = ["Date,Merchant,Category,Amount,Currency,Type,Source,Account,Note,Raw Text"]
+        var rows = ["Date,Merchant,Category,Amount,Currency,Type,Source,Bank,Account,Note,Raw Text"]
         let df = ISO8601DateFormatter()
         for e in expenses.sorted(by: { $0.date < $1.date }) {
             rows.append([
@@ -23,6 +23,7 @@ enum CSVExporter {
                 e.currency,
                 e.isIncome ? "Income" : "Expense",
                 e.source.label,
+                e.bank ?? "",
                 e.account ?? "",
                 e.note ?? "",
                 e.rawText ?? ""

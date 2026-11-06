@@ -45,6 +45,7 @@ enum ExpenseStore {
                               source: source,
                               isIncome: parsed.isIncome,
                               account: parsed.account,
+                              bank: BankDetector.detect(text: text, sender: sender),
                               rawText: text,
                               sender: sender,
                               needsReview: parsed.confidence < 0.6 || parsed.merchant == nil)
@@ -66,7 +67,8 @@ enum ExpenseStore {
                               category: category,
                               date: date,
                               source: .wallet,
-                              account: card,
+                              account: card.flatMap(Self.lastDigits),
+                              bank: BankDetector.fromWalletCard(card),
                               rawText: "Wallet: \(amountText) at \(name ?? "?") – \(card ?? "")",
                               needsReview: name?.isEmpty ?? true)
         return save(expense)
@@ -82,6 +84,7 @@ enum ExpenseStore {
                 existing.needsReview = false
             }
             if existing.account == nil { existing.account = expense.account }
+            if (existing.bank ?? "").isEmpty { existing.bank = expense.bank }
             if let raw = expense.rawText {
                 existing.rawText = [existing.rawText, raw].compactMap { $0 }.joined(separator: "\n—\n")
             }
@@ -109,11 +112,24 @@ enum ExpenseStore {
         }
     }
 
+    static func find(_ id: UUID) -> Expense? {
+        var d = FetchDescriptor<Expense>(predicate: #Predicate { $0.id == id })
+        d.fetchLimit = 1
+        return try? context.fetch(d).first
+    }
+
+    /// "Visa ••1234" → "1234"
+    static func lastDigits(_ s: String) -> String? {
+        guard let r = s.range(of: #"\d{4}(?!.*\d)"#, options: .regularExpression) else { return nil }
+        return String(s[r])
+    }
+
     /// Copy an expense as a new manual entry dated now (e.g. a repeat purchase).
     @discardableResult
     static func duplicate(_ e: Expense) -> Expense {
         let copy = Expense(amount: e.amount, currency: e.currency, merchant: e.merchant, category: e.category,
-                           date: .now, source: .manual, isIncome: e.isIncome, account: e.account, note: e.note)
+                           date: .now, source: .manual, isIncome: e.isIncome, account: e.account, bank: e.bank,
+                           note: e.note)
         context.insert(copy)
         try? context.save()
         BudgetService.evaluate(after: copy)

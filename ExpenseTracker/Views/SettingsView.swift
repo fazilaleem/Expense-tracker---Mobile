@@ -59,7 +59,7 @@ struct SettingsView: View {
                         row("Lock with Face ID", symbol: "faceid", color: Color(light: 0x0F766E, dark: 0x2DD4BF))
                     }
                     Toggle(isOn: $notifyOnLog) {
-                        row("Confirm auto-recorded", symbol: "bell.badge.fill", color: Color(light: 0xEF4444, dark: 0xF87171))
+                        row("Notify for each transaction", symbol: "bell.badge.fill", color: Color(light: 0xEF4444, dark: 0xF87171))
                     }
                     Toggle(isOn: $mergeDuplicates) {
                         row("Merge Wallet + SMS duplicates", symbol: "square.on.square", color: Color(light: 0x8B5CF6, dark: 0xA78BFA))

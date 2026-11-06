@@ -18,6 +18,7 @@ struct TransactionsView: View {
             (categoryFilter == nil || e.category == categoryFilter) &&
             (search.isEmpty || e.merchant.localizedCaseInsensitiveContains(search)
                 || (e.note ?? "").localizedCaseInsensitiveContains(search)
+                || (e.bank ?? "").localizedCaseInsensitiveContains(search)
                 || (e.rawText ?? "").localizedCaseInsensitiveContains(search))
         }
     }
@@ -121,7 +122,7 @@ struct TransactionsView: View {
         .scrollContentBackground(.hidden)
         .themedBackground()
         .animation(.snappy, value: categoryFilter)
-        .searchable(text: $search, prompt: "Merchant, note or SMS text")
+        .searchable(text: $search, prompt: "Merchant, bank, note or SMS text")
         .navigationTitle(onlyReview ? "To review" : "Transactions")
         .toolbar {
             if !onlyReview {

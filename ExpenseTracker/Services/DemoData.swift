@@ -34,6 +34,7 @@ enum DemoData {
                 .addingTimeInterval(-Double(i % 5) * 3600 * 2)
             ctx.insert(Expense(amount: s.2, currency: cur, merchant: s.0, category: s.1, date: date,
                                source: s.3, account: ["4321", "9876"][i % 2],
+                               bank: i % 5 == 3 ? nil : ["Emirates NBD", "ADCB"][i % 2],
                                rawText: "\(cur) \(s.2) spent at \(s.0.uppercased())",
                                needsReview: i == 4))
         }
