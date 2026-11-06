@@ -1,0 +1,53 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Run unit tests
+        run: |
+          SIM=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [0-9]+( Pro)?' )
+          echo "Using simulator: $SIM"
+          xcodebuild test \
+            -project ExpenseTracker.xcodeproj \
+            -scheme ExpenseTracker \
+            -destination "platform=iOS Simulator,name=$SIM" \
+            CODE_SIGNING_ALLOWED=NO | xcbeautify || exit ${PIPESTATUS[0]}
+
+      - name: Build unsigned app for iPhone
+        run: |
+          xcodebuild build \
+            -project ExpenseTracker.xcodeproj \
+            -scheme ExpenseTracker \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | xcbeautify || exit ${PIPESTATUS[0]}
+
+      - name: Package .ipa
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/ExpenseTracker.app Payload/
+          zip -qry ExpenseTracker.ipa Payload
+          ls -lh ExpenseTracker.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ExpenseTracker-ipa
+          path: ExpenseTracker.ipa
+          retention-days: 30
