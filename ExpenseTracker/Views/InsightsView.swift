@@ -220,7 +220,7 @@ struct InsightsView: View {
                          color: change > 0.05 ? Theme.danger : Theme.emerald)
                 }
             }
-            HStack(spacing: 10) {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                 metric("Income", Formatters.compactMoney(income, currency), Theme.income)
                 metric("Net", (income - spent >= 0 ? "+" : "−") + Formatters.compactMoney(abs(income - spent), currency),
                        income - spent >= 0 ? Theme.income : Theme.danger)
