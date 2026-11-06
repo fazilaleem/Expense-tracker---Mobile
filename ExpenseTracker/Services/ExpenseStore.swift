@@ -119,7 +119,7 @@ enum ExpenseStore {
     }
 
     /// "Visa ••1234" → "1234"
-    static func lastDigits(_ s: String) -> String? {
+    nonisolated static func lastDigits(_ s: String) -> String? {
         guard let r = s.range(of: #"\d{4}(?!.*\d)"#, options: .regularExpression) else { return nil }
         return String(s[r])
     }
