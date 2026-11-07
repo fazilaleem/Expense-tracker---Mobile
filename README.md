@@ -16,6 +16,11 @@ an action without any tap when:
 | **Message** (SMS containing "debited", "spent", …) | Full SMS text + sender | **Log Expense from Message** |
 | **Transaction** (Apple Pay / Wallet card tapped) | Amount, merchant, card | **Log Wallet Transaction** |
 
+Step-by-step illustrated setup (several banks and several Wallet cards):
+[bank SMS](design/shortcuts-guide/1-bank-sms.png) ·
+[multiple banks](design/shortcuts-guide/2-multiple-banks.png) ·
+[Wallet cards](design/shortcuts-guide/3-wallet-cards.png).
+
 The app adds these actions to Shortcuts through App Intents. The in-app
 **Settings ▸ Automation setup guide** walks you through the 3-minute setup.
 
