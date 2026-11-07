@@ -127,4 +127,35 @@ final class TransactionParserTests: XCTestCase {
         XCTAssertNil(BankDetector.fromWalletCard("1234"))
         XCTAssertEqual(ExpenseStore.lastDigits("Visa ••1234"), "1234")
     }
+
+    // MARK: Gulf formats (3-decimal currencies)
+
+    func testBahrainDebitWithFils() throws {
+        let p = try XCTUnwrap(parse("BD 12.345 has been debited from your account XXXX81150000 at LULU HYPERMARKET on 07/11/2026", "BHD"))
+        XCTAssertEqual(p.amount, 12.345, accuracy: 0.0001)
+        XCTAssertEqual(p.currency, "BHD")
+        XCTAssertEqual(p.merchant, "Lulu Hypermarket")
+        XCTAssertFalse(p.isIncome)
+    }
+
+    func testKuwaitCardTrx() throws {
+        let p = try XCTUnwrap(parse("Trx on your card XXXX1234 for KWD 7.500 at TALABAT on 07-11-2026. Avl limit KWD 990.000", "KWD"))
+        XCTAssertEqual(p.amount, 7.5, accuracy: 0.0001)
+        XCTAssertEqual(p.currency, "KWD")
+        XCTAssertEqual(p.merchant, "Talabat")
+        XCTAssertEqual(p.account, "1234")
+        XCTAssertFalse(p.isIncome)
+    }
+
+    func testAccountHasBeenDebited() throws {
+        let p = try XCTUnwrap(parse("Your A/C 0020-XXXX71-300 has been debited with BHD 25.000 on 07/11/2026", "BHD"))
+        XCTAssertEqual(p.amount, 25, accuracy: 0.0001)
+        XCTAssertFalse(p.isIncome)
+    }
+
+    func testGulfBanks() {
+        XCTAssertEqual(BankDetector.detect(text: "Trx on your KFH card", sender: nil), "KFH")
+        XCTAssertEqual(BankDetector.detect(text: "BD 5.000 debited", sender: "ALSALAM"), "Al Salam Bank")
+        XCTAssertEqual(BankDetector.detect(text: "BD 5.000 debited", sender: "BBK"), "BBK")
+    }
 }

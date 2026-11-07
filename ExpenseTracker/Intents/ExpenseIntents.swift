@@ -17,18 +17,31 @@ struct LogMessageIntent: AppIntent {
                inputOptions: String.IntentInputOptions(multiline: true))
     var message: String
 
-    @Parameter(title: "Sender", description: "Optional – who sent the message (e.g. your bank)")
+    @Parameter(title: "Bank / account",
+               description: "Optional – label for this automation, e.g. “KFH Credit Card”. Leave empty to detect it automatically.")
+    var bank: String?
+
+    @Parameter(title: "Sender", description: "Optional – who sent the message")
     var sender: String?
 
     static var parameterSummary: some ParameterSummary {
         Summary("Log expense from \(\.$message)") {
+            \.$bank
             \.$sender
         }
     }
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let result = ExpenseStore.logMessage(message, sender: sender, source: .sms)
+        // Common setup mistake: typing a bank name into the Message field instead of
+        // passing the received message. Without digits there can't be an amount.
+        if !message.contains(where: \.isNumber) {
+            NotificationService.postSetupHint(
+                title: "Automation needs fixing",
+                body: "“Log Expense from Message” received “\(message.prefix(40))” instead of the SMS. In Shortcuts, set the Message field to the trigger’s Message variable, and put the bank name in “Bank / account”.")
+            return .result(dialog: "Not recorded: the Message field should be the received message, not “\(message.prefix(40))”.")
+        }
+        let result = ExpenseStore.logMessage(message, sender: sender, bank: bank, source: .sms)
         NotificationService.confirm(result)
         return .result(dialog: IntentDialog(stringLiteral: result.summary))
     }
@@ -64,6 +77,12 @@ struct LogWalletTransactionIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
+        if !amount.contains(where: \.isNumber) {
+            NotificationService.postSetupHint(
+                title: "Wallet automation needs fixing",
+                body: "“Log Wallet Transaction” got no amount. In Shortcuts, tap Amount and Merchant and choose the Wallet trigger’s variables (they turn into blue tokens).")
+            return .result(dialog: "Not recorded: no amount was passed from the Wallet trigger.")
+        }
         let result = ExpenseStore.logWallet(amountText: amount, merchant: merchant, card: card)
         NotificationService.confirm(result)
         return .result(dialog: IntentDialog(stringLiteral: result.summary))

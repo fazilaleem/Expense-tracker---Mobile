@@ -73,7 +73,7 @@ enum TransactionParser {
     private static let debitWords = [
         "debited", "debit", "spent", "purchase", "purchased", "paid", "payment of", "payment to",
         "withdrawn", "withdrawal", "charged", "sent", "transferred to", "trf to", "used at",
-        "used for", "using your", "txn of", "transaction of", "pos ", "deducted", "dr."
+        "used for", "using your", "trx", "has been debited", "txn of", "transaction of", "pos ", "deducted", "dr."
     ]
     private static let creditWords = [
         "credited", "received", "refund", "refunded", "deposited", "cashback", "reversed",
@@ -119,6 +119,7 @@ enum TransactionParser {
         ("US$", "USD"), ("USD", "USD"), ("INR", "INR"), ("Rs.", "INR"), ("Rs", "INR"), ("₹", "INR"),
         ("AED", "AED"), ("Dhs.", "AED"), ("Dhs", "AED"), ("Dh.", "AED"), ("Dh", "AED"),
         ("PKR", "PKR"), ("SAR", "SAR"), ("QAR", "QAR"), ("OMR", "OMR"), ("KWD", "KWD"), ("BHD", "BHD"),
+        ("BD", "BHD"), ("KD", "KWD"), ("QR", "QAR"), ("RO", "OMR"),
         ("EUR", "EUR"), ("€", "EUR"), ("GBP", "GBP"), ("£", "GBP"), ("CAD", "CAD"), ("AUD", "AUD"),
         ("SGD", "SGD"), ("MYR", "MYR"), ("RM", "MYR"), ("JPY", "JPY"), ("¥", "JPY"), ("NGN", "NGN"),
         ("₦", "NGN"), ("KES", "KES"), ("ZAR", "ZAR"), ("LKR", "LKR"), ("BDT", "BDT"), ("Tk", "BDT"),
@@ -130,7 +131,8 @@ enum TransactionParser {
         .map { NSRegularExpression.escapedPattern(for: $0.token) }
         .joined(separator: "|")
 
-    private static let numberPattern = #"[0-9]{1,3}(?:[,][0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]+(?:[.,][0-9]{1,2})?"#
+    /// Supports thousands separators and up to 3 decimals (BHD / KWD / OMR use fils).
+    private static let numberPattern = #"[0-9]{1,3}(?:[,][0-9]{2,3})*(?:\.[0-9]{1,3})?|[0-9]+(?:\.[0-9]{1,3}|,[0-9]{1,2})?"#
 
     private static let currencyFirst = try! NSRegularExpression(
         pattern: "(?<![A-Za-z])(\(currencyAlternation))\\s?(\(numberPattern))(?![0-9])",

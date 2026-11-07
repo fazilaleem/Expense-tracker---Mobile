@@ -94,6 +94,16 @@ enum NotificationService {
         return "\(b.title) budget: \(Formatters.compactMoney(s.spent, b.currency)) of \(Formatters.compactMoney(b.limit, b.currency)) used \(b.period.noun) (\(Int((s.ratio * 100).rounded()))%)."
     }
 
+    /// Tells the user an automation is wired wrongly (e.g. the Message field holds "KFH" instead of the SMS).
+    static func postSetupHint(title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.threadIdentifier = "setup"
+        post(content)
+    }
+
     // MARK: Budget alerts
 
     static func postBudgetAlert(_ b: Budget, status s: BudgetStatus) {

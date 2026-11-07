@@ -28,7 +28,10 @@ enum ExpenseStore {
 
     /// Parse a raw SMS / notification and save it.
     @discardableResult
-    static func logMessage(_ text: String, sender: String?, source: ExpenseSource, date: Date = .now) -> LogResult {
+    /// `bank` (optional) names the bank / account explicitly, e.g. "KFH Credit Card" set in the automation;
+    /// otherwise it is detected from the sender or message text.
+    static func logMessage(_ text: String, sender: String?, bank: String? = nil, source: ExpenseSource,
+                           date: Date = .now) -> LogResult {
         let currency = AppSettings.defaultCurrency
         guard let parsed = TransactionParser.parse(text, defaultCurrency: currency) else {
             return .ignored("No transaction amount found in the message.")
@@ -45,7 +48,8 @@ enum ExpenseStore {
                               source: source,
                               isIncome: parsed.isIncome,
                               account: parsed.account,
-                              bank: BankDetector.detect(text: text, sender: sender),
+                              bank: (bank?.trimmingCharacters(in: .whitespaces)).flatMap { $0.isEmpty ? nil : $0 }
+                                    ?? BankDetector.detect(text: text, sender: sender),
                               rawText: text,
                               sender: sender,
                               needsReview: parsed.confidence < 0.6 || parsed.merchant == nil)

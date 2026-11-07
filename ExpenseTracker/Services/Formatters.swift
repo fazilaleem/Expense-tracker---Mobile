@@ -2,7 +2,8 @@ import Foundation
 
 enum Formatters {
     static func money(_ value: Double, _ currency: String) -> String {
-        value.formatted(.currency(code: currency).precision(.fractionLength(currency == "JPY" ? 0 : 2)))
+        // Uses each currency's own minor units: 2 for AED/USD, 3 for BHD/KWD/OMR, 0 for JPY.
+        value.formatted(.currency(code: currency))
     }
 
     static func compactMoney(_ value: Double, _ currency: String) -> String {
