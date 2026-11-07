@@ -38,8 +38,8 @@ struct LogMessageIntent: AppIntent {
         if !message.contains(where: \.isNumber) {
             NotificationService.postSetupHint(
                 title: "Automation needs fixing",
-                body: "“Log Expense from Message” received “\(message.prefix(40))” instead of the SMS. In Shortcuts, set the Message field to the trigger’s Message variable, and put the bank name in “Bank / account”.")
-            return .result(dialog: "Not recorded: the Message field should be the received message, not “\(message.prefix(40))”.")
+                body: "“Log Expense from Message” received “\(String(message.prefix(40)))” instead of the SMS. In Shortcuts, set the Message field to the trigger’s Message variable, and put the bank name in “Bank / account”.")
+            return .result(dialog: "Not recorded: the Message field should be the received message, not “\(String(message.prefix(40)))”.")
         }
         let result = ExpenseStore.logMessage(message, sender: sender, bank: bank, source: .sms)
         NotificationService.confirm(result)
