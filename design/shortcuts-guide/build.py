@@ -80,12 +80,12 @@ def s_automation_tab(extra=""):
 
 def s_new_automation(highlight):
     rows=[("Time of Day","#FF9500","☀"),("Alarm","#FF9500","⏰"),("Email","#007AFF","✉"),
-          ("Message","#34C759","💬"),("Transaction","#000","▭"),("Wi-Fi","#007AFF","◉"),("NFC","#5856D6","◎"),("App","#5856D6","▢")]
+          ("Message","#34C759","💬"),("Wallet","#000","▭"),("Wi-Fi","#007AFF","◉"),("NFC","#5856D6","◎"),("App","#5856D6","▢")]
     cells=''
     for name,c,i in rows:
         hl=' hl' if name==highlight else ''
         tag='<span class="tag">Tap</span>' if name==highlight else ''
-        sub={'Transaction':'<div style="font-size:10.5px;color:#8a8a8e">When I tap a card in Wallet</div>','Message':'<div style="font-size:10.5px;color:#8a8a8e">When I get a message…</div>'}.get(name,'')
+        sub={'Wallet':'<div style="font-size:10.5px;color:#8a8a8e">When I tap a card in Wallet</div>','Message':'<div style="font-size:10.5px;color:#8a8a8e">When I get a message…</div>'}.get(name,'')
         cells+=f'<div class="cell{hl}">{tag}<div class="ic" style="background:{c}">{i}</div><div class="grow">{name}{sub}</div><span class="chev">›</span></div>'
     return f'''<div class="nav"><span>Cancel</span><span class="t">New Automation</span><span></span></div>
     <div class="search">⌕ Search</div>
@@ -158,7 +158,7 @@ def wallet_trigger():
     cards=[("Emirates NBD Visa","linear-gradient(135deg,#0A3D91,#3A6FD8)",True),("ADCB Mastercard","linear-gradient(135deg,#7a0f1f,#C8102E)",True),
            ("Mashreq Debit","linear-gradient(135deg,#F37021,#f7a35c)",True),("Apple Cash","linear-gradient(135deg,#111,#444)",False)]
     cells=''.join(f'<div class="cell{" hl" if on else ""}"><div class="cardart" style="background:{g}"></div><div class="grow">{n}</div>{"<span class=check>✓</span>" if on else ""}</div>' for n,g,on in cards)
-    return f'''<div class="nav"><span>‹ Back</span><span class="t">Transaction</span><span style="font-weight:600">Next</span></div>
+    return f'''<div class="nav"><span>‹ Back</span><span class="t">Wallet</span><span style="font-weight:600">Next</span></div>
     <div class="sec">When I tap any of these cards</div>
     <div class="group">{cells}</div>
     <div class="group" style="margin-top:12px">
@@ -184,7 +184,7 @@ def page(title, sub, steps, note=None):
     return f'''<!doctype html><html><head><meta charset="utf-8"><style>{CSS}</style></head><body>
     <h1><img class="logo" src="{LOGO}">{title}</h1><div class="sub">{sub}</div>
     <div class="row">{''.join(steps)}</div>{note_html}
-    <div class="disc">Illustration of the iOS 17/18 Shortcuts app — wording and layout may differ slightly on your iPhone.</div>
+    <div class="disc">Illustration of the Shortcuts app. On iOS 26/27 the look differs (and “Transaction” is now “Wallet”), but the trigger options and the Expenses actions are the same.</div>
     </body></html>'''
 
 pages = {
@@ -205,7 +205,7 @@ pages = {
   note="<b>About Sender:</b> Shortcuts only lists <b>saved contacts</b>. A bank that texts from a <b>number</b> (e.g. 2626 or +971…) can be saved as a contact named after the bank. Banks that send from a <b>name</b> (e.g. “ADCB”, “AD-HDFCBK”) can’t be saved — use Option A for those. Either way, the app reads the sender to fill in the <b>Bank</b> field."),
 "3-wallet-cards": page("Part 3 · Apple Pay / Wallet cards",
   "One automation covers every card you pick. If your bank also texts you for the same purchase, the app merges them, so nothing is counted twice.",
-  [step(1, s_new_automation("Transaction"), "Automation tab → <b>+</b> → choose <b>Transaction</b>."),
+  [step(1, s_new_automation("Wallet"), "Automation → <b>+</b> → choose <b>Wallet</b> (called <b>Transaction</b> on iOS 17/18)."),
    step(2, wallet_trigger(), "Tick <b>all the cards</b> you pay with. Leave Merchant and Category as <b>Any</b>. Select <b>Run Immediately</b> → <b>Next</b>."),
    step(3, s_search("log wallet","Log Wallet Transaction","Expenses"), "<b>New Blank Automation</b> → Add Action → search <b>log wallet</b> → <b>Log Wallet Transaction</b>."),
    step(4, wallet_action(), "Set <b>Amount</b>, <b>Merchant</b>, and <b>Card</b> (= Shortcut Input › <b>Name</b>). Tap <b>Done</b>."),
