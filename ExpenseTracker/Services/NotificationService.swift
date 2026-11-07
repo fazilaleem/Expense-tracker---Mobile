@@ -51,47 +51,29 @@ enum NotificationService {
         }
     }
 
+    /// Minimal two-line notification:
+    ///   −BHD 1.000 · Carrefour
+    ///   Groceries · KFH ••1234
     static func postExpense(_ e: Expense, merged: Bool = false) {
         let content = UNMutableNotificationContent()
         let sign = e.isIncome ? "+" : "−"
-        content.title = merged
-            ? "Already recorded · \(e.merchant)"
-            : "\(sign)\(Formatters.money(e.amount, e.currency)) · \(e.merchant)"
+        content.title = "\(sign)\(Formatters.money(e.amount, e.currency)) · \(e.merchant)"
 
-        var subtitle = [e.category.rawValue]
-        if let acc = e.accountLabel { subtitle.append(acc) }
-        content.subtitle = subtitle.joined(separator: "  ·  ")
-
-        var lines: [String] = []
+        var details = [e.category.rawValue]
+        if let acc = e.accountLabel { details.append(acc) }
         if merged {
-            lines.append("\(sign)\(Formatters.money(e.amount, e.currency)) matched an existing entry, so it wasn't counted twice.")
-        } else {
-            lines.append("\(e.isIncome ? "Income" : "Expense") via \(e.source.label) at \(e.date.formatted(date: .omitted, time: .shortened)).")
+            details = ["Already recorded"]
+        } else if e.needsReview {
+            details.append("Tap to add details")
         }
-        if !e.isIncome, let line = budgetLine(for: e) { lines.append(line) }
-        if e.needsReview { lines.append("Some details weren't clear — tap to review.") }
-        else if (e.bank ?? "").isEmpty && e.source != .manual { lines.append("Tap to add the bank or account.") }
-        content.body = lines.joined(separator: "\n")
+        content.body = details.joined(separator: " · ")
 
         content.sound = .default
         content.threadIdentifier = "expenses"
         content.categoryIdentifier = Category.expense
         content.userInfo = ["route": "expense", "expenseID": e.id.uuidString]
         content.relevanceScore = e.needsReview ? 0.8 : 0.5
-        if let attachment = attachment(symbol: e.category.symbol, color: e.category.color, name: "cat") {
-            content.attachments = [attachment]
-        }
         post(content)
-    }
-
-    /// e.g. "Groceries budget: AED 420 of 600 used this month (70%)."
-    private static func budgetLine(for e: Expense) -> String? {
-        let budgets = (try? ExpenseStore.context.fetch(FetchDescriptor<Budget>())) ?? []
-        let relevant = budgets.filter { $0.isEnabled && $0.limit > 0 && $0.applies(to: e) }
-            .sorted { ($0.categoryRaw == nil ? 1 : 0) < ($1.categoryRaw == nil ? 1 : 0) }
-        guard let b = relevant.first else { return nil }
-        let s = BudgetService.status(of: b)
-        return "\(b.title) budget: \(Formatters.compactMoney(s.spent, b.currency)) of \(Formatters.compactMoney(b.limit, b.currency)) used \(b.period.noun) (\(Int((s.ratio * 100).rounded()))%)."
     }
 
     /// Tells the user an automation is wired wrongly (e.g. the Message field holds "KFH" instead of the SMS).
@@ -106,26 +88,24 @@ enum NotificationService {
 
     // MARK: Budget alerts
 
+    /// Minimal two-line budget alert:
+    ///   Food budget 85% used
+    ///   BHD 23.000 left this week
     static func postBudgetAlert(_ b: Budget, status s: BudgetStatus) {
         guard BudgetService.alertsEnabled else { return }
         let content = UNMutableNotificationContent()
-        let pct = Int((s.ratio * 100).rounded())
         if s.level == .exceeded {
             content.title = "\(b.title) budget exceeded"
-            content.body = "Over by \(Formatters.money(-s.remaining, b.currency)). \(s.timeLeftText)."
+            content.body = "Over by \(Formatters.money(-s.remaining, b.currency)) \(b.period.noun)"
         } else {
-            content.title = "\(b.title) budget \(pct)% used"
-            content.body = "\(Formatters.money(max(s.remaining, 0), b.currency)) left \(b.period.noun). \(s.timeLeftText)."
+            content.title = "\(b.title) budget \(Int((s.ratio * 100).rounded()))% used"
+            content.body = "\(Formatters.money(max(s.remaining, 0), b.currency)) left \(b.period.noun)"
         }
-        content.subtitle = "\(b.period.label) · \(Formatters.compactMoney(s.spent, b.currency)) of \(Formatters.compactMoney(b.limit, b.currency))"
         content.sound = .default
         content.interruptionLevel = .timeSensitive
         content.threadIdentifier = "budgets"
         content.categoryIdentifier = Category.budget
         content.userInfo = ["route": "budgets", "budgetID": b.id.uuidString]
-        if let attachment = ringAttachment(ratio: s.ratio, level: s.level, symbol: b.symbol) {
-            content.attachments = [attachment]
-        }
         post(content)
     }
 
@@ -136,72 +116,6 @@ enum NotificationService {
             UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
     }
 
-    /// Renders a small branded image (category tile) as a notification thumbnail.
-    private static func attachment(symbol: String, color: Color, name: String) -> UNNotificationAttachment? {
-        let view = NotificationTile(symbol: symbol, color: color)
-        return render(view, name: name)
-    }
-
-    private static func ringAttachment(ratio: Double, level: BudgetStatus.Level, symbol: String) -> UNNotificationAttachment? {
-        render(NotificationRing(ratio: ratio, color: level.color, symbol: symbol), name: "ring")
-    }
-
-    private static func render<V: View>(_ view: V, name: String) -> UNNotificationAttachment? {
-        let renderer = ImageRenderer(content: view.environment(\.colorScheme, .light))
-        renderer.scale = 3
-        guard let image = renderer.uiImage, let data = image.pngData() else { return nil }
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(name)-\(UUID().uuidString).png")
-        do {
-            try data.write(to: url)
-            return try UNNotificationAttachment(identifier: name, url: url,
-                                                options: [UNNotificationAttachmentOptionsThumbnailClippingRectKey:
-                                                            CGRect(x: 0, y: 0, width: 1, height: 1).dictionaryRepresentation])
-        } catch {
-            return nil
-        }
-    }
-}
-
-/// Category icon on a soft gradient tile with a tiny brand mark.
-private struct NotificationTile: View {
-    let symbol: String
-    let color: Color
-    var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(LinearGradient(colors: [color.opacity(0.95), color.opacity(0.7)],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(width: 120, height: 120)
-                .overlay(Image(systemName: symbol).font(.system(size: 52, weight: .semibold)).foregroundStyle(.white))
-            Image("AppLogo")
-                .resizable()
-                .frame(width: 38, height: 38)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(.white, lineWidth: 3))
-                .offset(x: 6, y: 6)
-        }
-        .padding(8)
-    }
-}
-
-/// Progress ring used for budget alerts.
-private struct NotificationRing: View {
-    let ratio: Double
-    let color: Color
-    let symbol: String
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 28, style: .continuous).fill(.white)
-            Circle().stroke(color.opacity(0.18), lineWidth: 12).padding(16)
-            Circle().trim(from: 0, to: min(ratio, 1))
-                .stroke(color, style: StrokeStyle(lineWidth: 12, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .padding(16)
-            Image(systemName: symbol).font(.system(size: 30, weight: .bold)).foregroundStyle(color)
-        }
-        .frame(width: 120, height: 120)
-        .padding(8)
-    }
 }
 
 // MARK: - Delegate & routing
