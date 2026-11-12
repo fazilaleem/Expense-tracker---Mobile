@@ -24,8 +24,13 @@ struct LogMessageIntent: AppIntent {
     @Parameter(title: "Sender", description: "Optional – who sent the message")
     var sender: String?
 
+    @Parameter(title: "Record as", description: "Automatic reads the message. Choose Expense for rules that only catch spending.",
+               default: .automatic)
+    var recordAs: RecordAs
+
     static var parameterSummary: some ParameterSummary {
         Summary("Log expense from \(\.$message)") {
+            \.$recordAs
             \.$bank
             \.$sender
         }
@@ -41,7 +46,8 @@ struct LogMessageIntent: AppIntent {
                 body: "“Log Expense from Message” received “\(String(message.prefix(40)))” instead of the SMS. In Shortcuts, set the Message field to the trigger’s Message variable, and put the bank name in “Bank / account”.")
             return .result(dialog: "Not recorded: the Message field should be the received message, not “\(String(message.prefix(40)))”.")
         }
-        let result = ExpenseStore.logMessage(message, sender: sender, bank: bank, source: .sms)
+        let force: Bool? = recordAs == .automatic ? nil : (recordAs == .income)
+        let result = ExpenseStore.logMessage(message, sender: sender, bank: bank, forceIncome: force, source: .sms)
         NotificationService.confirm(result)
         return .result(dialog: IntentDialog(stringLiteral: result.summary))
     }
@@ -139,6 +145,18 @@ struct MonthlySpendIntent: AppIntent {
             .joined(separator: " + ")
         return .result(value: totals[main] ?? 0, dialog: IntentDialog(stringLiteral: "You've spent \(text) this month."))
     }
+}
+
+// MARK: - Record as
+
+enum RecordAs: String, AppEnum {
+    case automatic, expense, income
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Record as"
+    static var caseDisplayRepresentations: [RecordAs: DisplayRepresentation] = [
+        .automatic: "Automatic",
+        .expense: "Expense",
+        .income: "Income"
+    ]
 }
 
 // MARK: - Category as an App Enum

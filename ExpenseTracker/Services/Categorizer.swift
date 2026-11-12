@@ -40,7 +40,7 @@ enum Categorizer {
         (.education, ["school", "college", "university", "udemy", "coursera", "tuition", "academy", "books",
                       "kindle", "bookstore", "magrudy", "library"]),
         (.cash, ["atm", "cash withdrawal", "withdrawn at", "cash wdl", "cwdl"]),
-        (.transfer, ["transfer", "trf", "neft", "imps", "rtgs", "upi", "sent to", "remittance", "western union",
+        (.transfer, ["iban", "beneficiary", "transfer", "trf", "neft", "imps", "rtgs", "upi", "sent to", "remittance", "western union",
                      "wise", "remitly", "al ansari", "lulu exchange", "raast", "ibft"])
     ]
 

@@ -39,7 +39,10 @@ enum TransactionParser {
         if direction == nil && looksPromotional(lower) { return nil }
 
         let isIncome = direction == .credit
-        let merchant = extractMerchant(from: text, isIncome: isIncome)
+        var merchant = extractMerchant(from: text, isIncome: isIncome)
+        if merchant == nil && !isIncome && (lower.contains("iban") || lower.contains("beneficiary")) {
+            merchant = "IBAN transfer"
+        }
         let account = extractAccount(from: text)
 
         var confidence = 0.4
@@ -80,7 +83,15 @@ enum TransactionParser {
         "reversal", "added to your", "cr."
     ]
 
+    /// Money credited to *someone else* – e.g. "credited to beneficiary IBAN BH…" means it left your account.
+    private static let outgoingPhrases = [
+        "credited to beneficiary", "credited to the beneficiary", "credited to iban", "credited to the iban",
+        "credited to beneficiary's", "to beneficiary iban", "credited to a/c of", "credited to account of",
+        "transferred to", "sent to", "paid to"
+    ]
+
     static func detectDirection(_ lower: String) -> Direction? {
+        if outgoingPhrases.contains(where: { lower.contains($0) }) { return .debit }
         func firstIndex(_ words: [String]) -> String.Index? {
             words.compactMap { lower.range(of: $0)?.lowerBound }.min()
         }
@@ -256,6 +267,7 @@ enum TransactionParser {
     private static func isPlausibleMerchant(_ s: String) -> Bool {
         let lower = s.lowercased()
         guard s.count >= 2, s.rangeOfCharacter(from: .letters) != nil else { return false }
+        if lower.hasPrefix("beneficiary") || lower.hasPrefix("iban") { return false }
         let banned = ["your", "you", "a/c", "ac ", "acct", "account", "card", "the", "be", "us", "avoid",
                       "call", "sms", "block", "report", "dispute", "customer", "bank", "self"]
         if banned.contains(where: { lower == $0 || lower.hasPrefix($0 + " ") }) { return false }

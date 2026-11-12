@@ -30,12 +30,14 @@ enum ExpenseStore {
     @discardableResult
     /// `bank` (optional) names the bank / account explicitly, e.g. "KFH Credit Card" set in the automation;
     /// otherwise it is detected from the sender or message text.
-    static func logMessage(_ text: String, sender: String?, bank: String? = nil, source: ExpenseSource,
-                           date: Date = .now) -> LogResult {
+    /// `forceIncome`: nil = detect from the text, false = always an expense, true = always income.
+    static func logMessage(_ text: String, sender: String?, bank: String? = nil, forceIncome: Bool? = nil,
+                           source: ExpenseSource, date: Date = .now) -> LogResult {
         let currency = AppSettings.defaultCurrency
-        guard let parsed = TransactionParser.parse(text, defaultCurrency: currency) else {
+        guard var parsed = TransactionParser.parse(text, defaultCurrency: currency) else {
             return .ignored("No transaction amount found in the message.")
         }
+        if let forceIncome { parsed.isIncome = forceIncome }
         if parsed.isIncome && AppSettings.ignoreIncome {
             return .ignored("Income messages are ignored (see Settings).")
         }
