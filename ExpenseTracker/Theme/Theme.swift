@@ -28,10 +28,12 @@ enum Theme {
     static let emeraldSoft = Color(light: 0xD1FAE5, dark: 0x0F3B2E)
 
     // Surfaces – very slightly green-tinted neutrals.
-    static let background = Color(light: 0xF3F6F4, dark: 0x090D0B)
+    static let background = Color(light: 0xEEF2EF, dark: 0x090D0B)
     static let card = Color(light: 0xFFFFFF, dark: 0x131A17)
-    static let cardStroke = Color(light: 0x0B1411, dark: 0xFFFFFF).opacity(0.06)
-    static let elevated = Color(light: 0xF6F9F7, dark: 0x1A2320)
+    static let cardStroke = Color(light: 0x0B1411, dark: 0xFFFFFF).opacity(0.09)
+    /// Inner tiles sitting on a card – clearly darker than the white card in light mode.
+    static let elevated = Color(light: 0xEAF0EC, dark: 0x1E2925)
+    static let tileStroke = Color(light: 0x0B1411, dark: 0xFFFFFF).opacity(0.07)
 
     // Semantic
     static let income = Color(light: 0x059669, dark: 0x34D399)
@@ -58,7 +60,7 @@ struct CardModifier: ViewModifier {
             .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
                 .strokeBorder(Theme.cardStroke, lineWidth: 1))
-            .shadow(color: .black.opacity(0.04), radius: 12, y: 4)
+            .shadow(color: .black.opacity(0.06), radius: 14, y: 5)
     }
 }
 
@@ -117,6 +119,33 @@ struct IconTile: View {
                 RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
                     .fill(filled ? AnyShapeStyle(color.gradient) : AnyShapeStyle(color.opacity(0.14)))
             )
+    }
+}
+
+/// Small metric tile used inside cards (value + caption), visible in both themes.
+struct MetricTile: View {
+    let title: String
+    let value: String
+    var color: Color = .primary
+    var symbol: String? = nil
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 5) {
+                if let symbol { Image(systemName: symbol).font(.caption2.weight(.bold)) }
+                Text(title)
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(.headline, design: .rounded).weight(.bold))
+                .foregroundStyle(color)
+                .lineLimit(1).minimumScaleFactor(0.6)
+                .contentTransition(.numericText())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Theme.elevated, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.tileStroke))
     }
 }
 

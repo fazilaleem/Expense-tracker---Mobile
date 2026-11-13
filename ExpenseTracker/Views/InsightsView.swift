@@ -2,15 +2,14 @@ import SwiftUI
 import SwiftData
 import Charts
 
-/// Monthly / yearly summaries with several ways to slice spending.
+/// Net / spending summaries for a month, a year or a custom range, filterable by category and bank.
 struct InsightsView: View {
     @Query(sort: \Expense.date, order: .reverse) private var all: [Expense]
     @AppStorage(SettingsKey.defaultCurrency) private var currency = AppSettings.defaultCurrency
 
     enum Scope: String, CaseIterable, Identifiable {
-        case month = "Month", year = "Year"
+        case month = "Month", year = "Year", custom = "Custom"
         var id: String { rawValue }
-        var component: Calendar.Component { self == .month ? .month : .year }
     }
     enum Breakdown: String, CaseIterable, Identifiable {
         case category = "Category", merchant = "Merchant", bank = "Bank", weekday = "Weekday"
@@ -19,37 +18,68 @@ struct InsightsView: View {
 
     @State private var scope: Scope = .month
     @State private var anchor = Date.now
+    @State private var customStart = Calendar.current.date(byAdding: .day, value: -29, to: .now)!
+    @State private var customEnd = Date.now
+    @State private var categoryFilter: String?
+    @State private var bankFilter: String?
     @State private var breakdown: Breakdown = .category
-    @State private var selectedBar: Date?
+    @State private var selectedMonth: Date?
 
     private let cal = Calendar.current
+    private let blue = Color(light: 0x3B82F6, dark: 0x60A5FA)
 
-    // MARK: Periods
+    // MARK: Period
 
     private var interval: DateInterval {
-        cal.dateInterval(of: scope.component, for: anchor) ?? DateInterval(start: anchor, duration: 1)
+        switch scope {
+        case .month: return cal.dateInterval(of: .month, for: anchor)!
+        case .year: return cal.dateInterval(of: .year, for: anchor)!
+        case .custom:
+            let s = cal.startOfDay(for: min(customStart, customEnd))
+            let e = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: max(customStart, customEnd)))!
+            return DateInterval(start: s, end: e)
+        }
     }
+
     private var previousInterval: DateInterval {
-        let prev = cal.date(byAdding: scope.component, value: -1, to: anchor)!
-        return cal.dateInterval(of: scope.component, for: prev)!
+        switch scope {
+        case .month: return cal.dateInterval(of: .month, for: interval.start.addingTimeInterval(-1))!
+        case .year: return cal.dateInterval(of: .year, for: interval.start.addingTimeInterval(-1))!
+        case .custom: return DateInterval(start: interval.start.addingTimeInterval(-interval.duration), end: interval.start)
+        }
     }
+
     private var isCurrent: Bool { interval.contains(.now) }
 
     private var periodTitle: String {
-        scope == .month
-            ? interval.start.formatted(.dateTime.month(.wide).year())
-            : interval.start.formatted(.dateTime.year())
+        switch scope {
+        case .month: return interval.start.formatted(.dateTime.month(.wide).year())
+        case .year: return interval.start.formatted(.dateTime.year())
+        case .custom:
+            let end = interval.end.addingTimeInterval(-1)
+            return "\(interval.start.formatted(.dateTime.day().month(.abbreviated))) – \(end.formatted(.dateTime.day().month(.abbreviated).year()))"
+        }
     }
 
-    private func items(in i: DateInterval) -> [Expense] {
-        all.filter { $0.currency == currency && $0.date >= i.start && $0.date < i.end }
+    // MARK: Filtered data
+
+    /// Everything matching the currency, category and bank filters (any date).
+    private var base: [Expense] {
+        all.filter { e in
+            e.currency == currency
+                && (categoryFilter == nil || e.categoryRaw == categoryFilter)
+                && (bankFilter == nil || (e.bank ?? "") == bankFilter)
+        }
     }
+    private func items(in i: DateInterval) -> [Expense] { base.filter { $0.date >= i.start && $0.date < i.end } }
+
     private var current: [Expense] { items(in: interval) }
     private var spending: [Expense] { current.filter { !$0.isIncome } }
     private var spent: Double { spending.reduce(0) { $0 + $1.amount } }
     private var income: Double { current.filter(\.isIncome).reduce(0) { $0 + $1.amount } }
+    private var net: Double { income - spent }
 
-    /// Previous period up to the same point, so a half-finished month is compared fairly.
+    /// Spending vs the same point of the previous period.
     private var change: Double? {
         let elapsed = isCurrent ? Date.now.timeIntervalSince(interval.start) : interval.duration
         let p = DateInterval(start: previousInterval.start, duration: min(elapsed, previousInterval.duration))
@@ -63,88 +93,14 @@ struct InsightsView: View {
         return max(1, (cal.dateComponents([.day], from: interval.start, to: end).day ?? 0) + (isCurrent ? 1 : 0))
     }
 
-    // MARK: Trend
-
-    private struct MonthTotal: Identifiable {
-        let month: Date
-        let spent: Double
-        let income: Double
-        let count: Int
-        var id: Date { month }
+    private var categoriesInUse: [CategoryStyle] {
+        Dictionary(grouping: all.filter { !$0.isIncome }, by: \.categoryRaw)
+            .sorted { $0.value.count > $1.value.count }
+            .map { CategoryStyle.of($0.key) }
     }
-
-    /// 6 months ending at the selected month, or the 12 months of the selected year.
-    private var trend: [MonthTotal] {
-        let months: [Date]
-        if scope == .month {
-            let start = cal.startOfMonth(for: interval.start)
-            months = (0..<6).reversed().compactMap { cal.date(byAdding: .month, value: -$0, to: start) }
-        } else {
-            months = (0..<12).compactMap { cal.date(byAdding: .month, value: $0, to: interval.start) }
-        }
-        return months.map { m in
-            let i = cal.dateInterval(of: .month, for: m)!
-            let list = items(in: i)
-            return MonthTotal(month: m,
-                              spent: list.filter { !$0.isIncome }.reduce(0) { $0 + $1.amount },
-                              income: list.filter(\.isIncome).reduce(0) { $0 + $1.amount },
-                              count: list.count)
-        }
+    private var banksInUse: [String] {
+        Array(Set(all.compactMap { $0.bank }.filter { !$0.isEmpty })).sorted()
     }
-
-    /// Every month that has data, newest first (the "monthly summary" list).
-    private var allMonths: [MonthTotal] {
-        let grouped = Dictionary(grouping: all.filter { $0.currency == currency }) { cal.startOfMonth(for: $0.date) }
-        return grouped.map { m, list in
-            MonthTotal(month: m,
-                       spent: list.filter { !$0.isIncome }.reduce(0) { $0 + $1.amount },
-                       income: list.filter(\.isIncome).reduce(0) { $0 + $1.amount },
-                       count: list.count)
-        }
-        .sorted { $0.month > $1.month }
-    }
-
-    // MARK: Breakdown
-
-    struct Slice: Identifiable {
-        let id: String
-        let title: String
-        let symbol: String
-        let color: Color
-        let total: Double
-        let items: [Expense]
-    }
-
-    private var slices: [Slice] {
-        let groups: [String: [Expense]]
-        switch breakdown {
-        case .category: groups = Dictionary(grouping: spending) { $0.categoryRaw }
-        case .merchant: groups = Dictionary(grouping: spending) { $0.merchant }
-        case .bank: groups = Dictionary(grouping: spending) { ($0.bank?.isEmpty == false ? $0.bank! : "Not set") }
-        case .weekday: groups = Dictionary(grouping: spending) { $0.date.formatted(.dateTime.weekday(.wide)) }
-        }
-        return groups.map { key, list in
-            let total = list.reduce(0) { $0 + $1.amount }
-            switch breakdown {
-            case .category:
-                let c = CategoryStyle.of(key)
-                return Slice(id: key, title: key, symbol: c.symbol, color: c.color, total: total, items: list)
-            case .merchant:
-                let c = list.first?.style ?? CategoryStyle.of(ExpenseCategory.other.rawValue)
-                return Slice(id: key, title: key, symbol: c.symbol, color: c.color, total: total, items: list)
-            case .bank:
-                return Slice(id: key, title: key, symbol: key == "Not set" ? "questionmark.circle" : "building.columns.fill",
-                             color: key == "Not set" ? .secondary : Color(light: 0x0F766E, dark: 0x2DD4BF),
-                             total: total, items: list)
-            case .weekday:
-                return Slice(id: key, title: key, symbol: "calendar", color: Color(light: 0x3B82F6, dark: 0x60A5FA),
-                             total: total, items: list)
-            }
-        }
-        .sorted { $0.total > $1.total }
-    }
-
-    private var largest: [Expense] { Array(spending.sorted { $0.amount > $1.amount }.prefix(5)) }
 
     // MARK: Body
 
@@ -165,6 +121,8 @@ struct InsightsView: View {
                 .animation(.snappy, value: anchor)
                 .animation(.snappy, value: scope)
                 .animation(.snappy, value: breakdown)
+                .animation(.snappy, value: categoryFilter)
+                .animation(.snappy, value: bankFilter)
             }
             .scrollIndicators(.hidden)
             .themedBackground()
@@ -174,103 +132,296 @@ struct InsightsView: View {
         }
     }
 
-    // MARK: Sections
+    // MARK: Controls
 
     private var controls: some View {
         VStack(spacing: 12) {
-            Picker("Scope", selection: $scope) {
+            Picker("Range", selection: $scope) {
                 ForEach(Scope.allCases) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
 
-            HStack {
-                Button { shift(-1) } label: { Image(systemName: "chevron.left").frame(width: 36, height: 36) }
-                Spacer()
-                Text(periodTitle).font(.headline).contentTransition(.numericText())
-                Spacer()
-                Button { shift(1) } label: { Image(systemName: "chevron.right").frame(width: 36, height: 36) }
-                    .disabled(isCurrent)
+            if scope == .custom {
+                HStack {
+                    DatePicker("From", selection: $customStart, displayedComponents: .date).labelsHidden()
+                    Image(systemName: "arrow.right").font(.caption).foregroundStyle(.secondary)
+                    DatePicker("To", selection: $customEnd, in: customStart..., displayedComponents: .date).labelsHidden()
+                    Spacer(minLength: 0)
+                }
+                .padding(10)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.cardStroke))
+            } else {
+                HStack {
+                    Button { shift(-1) } label: { Image(systemName: "chevron.left").frame(width: 36, height: 36) }
+                    Spacer()
+                    Text(periodTitle).font(.headline).contentTransition(.numericText())
+                    Spacer()
+                    Button { shift(1) } label: { Image(systemName: "chevron.right").frame(width: 36, height: 36) }
+                        .disabled(isCurrent)
+                }
+                .font(.body.weight(.semibold))
+                .padding(4)
+                .background(Theme.card, in: Capsule())
+                .overlay(Capsule().strokeBorder(Theme.cardStroke))
             }
-            .font(.body.weight(.semibold))
-            .padding(4)
-            .background(Theme.card, in: Capsule())
-            .overlay(Capsule().strokeBorder(Theme.cardStroke))
+
+            // Filters
+            HStack(spacing: 8) {
+                Menu {
+                    Button("All categories") { categoryFilter = nil }
+                    Divider()
+                    ForEach(categoriesInUse) { c in
+                        Button { categoryFilter = c.rawValue } label: { Label(c.rawValue, systemImage: c.symbol) }
+                    }
+                } label: {
+                    filterChip(categoryFilter.map { CategoryStyle.of($0).shortName } ?? "All categories",
+                               symbol: categoryFilter.map { CategoryStyle.of($0).symbol } ?? "square.grid.2x2",
+                               active: categoryFilter != nil)
+                }
+                Menu {
+                    Button("All banks") { bankFilter = nil }
+                    if !banksInUse.isEmpty { Divider() }
+                    ForEach(banksInUse, id: \.self) { b in Button(b) { bankFilter = b } }
+                } label: {
+                    filterChip(bankFilter ?? "All banks", symbol: "building.columns", active: bankFilter != nil)
+                }
+                Spacer(minLength: 0)
+                if categoryFilter != nil || bankFilter != nil {
+                    Button("Clear") { categoryFilter = nil; bankFilter = nil }
+                        .font(.subheadline.weight(.medium))
+                }
+            }
         }
     }
 
-    private func shift(_ by: Int) {
-        anchor = cal.date(byAdding: scope.component, value: by, to: anchor)!
-        selectedBar = nil
+    private func filterChip(_ title: String, symbol: String, active: Bool) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol).font(.caption.weight(.semibold))
+            Text(title).font(.subheadline.weight(.medium)).lineLimit(1)
+            Image(systemName: "chevron.down").font(.caption2.weight(.bold))
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .foregroundStyle(active ? .white : .primary)
+        .background(Capsule().fill(active ? AnyShapeStyle(Theme.emerald.gradient) : AnyShapeStyle(Theme.card)))
+        .overlay(Capsule().strokeBorder(active ? .clear : Theme.cardStroke))
     }
+
+    private func shift(_ by: Int) {
+        anchor = cal.date(byAdding: scope == .year ? .year : .month, value: by, to: anchor)!
+        selectedMonth = nil
+    }
+
+    // MARK: Summary
 
     private var summaryCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Spent").font(.subheadline).foregroundStyle(.secondary)
-                    Text(Formatters.money(spent, currency))
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
-                        .contentTransition(.numericText(value: spent))
+                    Text("Net").font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                    Text((net >= 0 ? "+" : "−") + Formatters.money(abs(net), currency))
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .foregroundStyle(net >= 0 ? Theme.income : Theme.danger)
+                        .contentTransition(.numericText(value: net))
                         .minimumScaleFactor(0.6).lineLimit(1)
                 }
                 Spacer()
                 if let change {
-                    Pill(text: "\(change >= 0 ? "+" : "−")\(Int((abs(change) * 100).rounded()))%",
+                    Pill(text: "\(change >= 0 ? "+" : "−")\(min(Int((abs(change) * 100).rounded()), 999))% spend",
                          symbol: change >= 0 ? "arrow.up.right" : "arrow.down.right",
                          color: change > 0.05 ? Theme.danger : Theme.emerald)
                 }
             }
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                metric("Income", Formatters.compactMoney(income, currency), Theme.income)
-                metric("Net", (income - spent >= 0 ? "+" : "−") + Formatters.compactMoney(abs(income - spent), currency),
-                       income - spent >= 0 ? Theme.income : Theme.danger)
-                metric("Per day", Formatters.compactMoney(spent / Double(daysElapsed), currency), .primary)
-                metric("Count", "\(spending.count)", .primary)
+                MetricTile(title: "Income", value: Formatters.money(income, currency), color: Theme.income, symbol: "arrow.down.left")
+                MetricTile(title: "Spent", value: Formatters.money(spent, currency), symbol: "arrow.up.right")
+                MetricTile(title: "Per day", value: Formatters.money(spent / Double(daysElapsed), currency), symbol: "calendar")
+                MetricTile(title: "Transactions", value: "\(current.count)", symbol: "list.bullet")
             }
             if let change {
-                Text("\(change >= 0 ? "Up" : "Down") \(Int((abs(change) * 100).rounded()))% compared with the same point last \(scope == .month ? "month" : "year").")
+                Text("Spending is \(change >= 0 ? "up" : "down") \(min(Int((abs(change) * 100).rounded()), 999))% vs the same point of the previous \(scope == .year ? "year" : scope == .month ? "month" : "period").")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .card()
     }
 
-    private func metric(_ title: String, _ value: String, _ color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(value)
-                .font(.system(.subheadline, design: .rounded).weight(.bold))
-                .foregroundStyle(color)
-                .lineLimit(1).minimumScaleFactor(0.6)
-            Text(title).font(.caption2).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    // MARK: Trend chart
+
+    private struct Point: Identifiable {
+        let x: Int
+        let value: Double
+        let series: String
+        var id: String { "\(series)-\(x)" }
     }
 
-    private var trendCard: some View {
-        let data = trend
-        let avg = data.isEmpty ? 0 : data.map(\.spent).reduce(0, +) / Double(max(data.filter { $0.spent > 0 }.count, 1))
-        let selected = selectedBar.flatMap { d in data.first { cal.isDate($0.month, equalTo: d, toGranularity: .month) } }
-        return VStack(alignment: .leading, spacing: 14) {
-            SectionTitle(title: scope == .month ? "Last 6 months" : "Month by month",
-                         trailing: selected.map { "\($0.month.formatted(.dateTime.month(.abbreviated))): \(Formatters.compactMoney($0.spent, currency))" }
-                            ?? "avg \(Formatters.compactMoney(avg, currency))")
-            Chart(data) { m in
-                BarMark(x: .value("Month", m.month, unit: .month), y: .value("Spent", m.spent), width: .ratio(0.6))
-                    .foregroundStyle(highlight(m) ? AnyShapeStyle(Theme.emerald.gradient) : AnyShapeStyle(Theme.emerald.opacity(0.3)))
-                    .cornerRadius(5)
-                if m.income > 0 {
-                    PointMark(x: .value("Month", m.month, unit: .month), y: .value("Income", m.income))
-                        .symbol(.circle)
-                        .symbolSize(30)
-                        .foregroundStyle(Color(light: 0x3B82F6, dark: 0x60A5FA))
+    private struct MonthBar: Identifiable {
+        let month: Date
+        let spent: Double
+        let income: Double
+        var id: Date { month }
+    }
+
+    /// Running total by day of month: this period vs the previous one.
+    private var cumulative: [Point] {
+        func run(_ i: DateInterval, upTo lastDay: Int, series: String) -> [Point] {
+            let byDay = Dictionary(grouping: items(in: i).filter { !$0.isIncome }) { cal.component(.day, from: $0.date) }
+                .mapValues { $0.reduce(0) { $0 + $1.amount } }
+            var total = 0.0
+            return (1...max(1, lastDay)).map { d in
+                total += byDay[d] ?? 0
+                return Point(x: d, value: total, series: series)
+            }
+        }
+        let daysThis = cal.range(of: .day, in: .month, for: interval.start)?.count ?? 30
+        let daysPrev = cal.range(of: .day, in: .month, for: previousInterval.start)?.count ?? 30
+        let today = isCurrent ? cal.component(.day, from: .now) : daysThis
+        return run(previousInterval, upTo: daysPrev, series: "Last month") + run(interval, upTo: today, series: "This month")
+    }
+
+    private var yearBars: [MonthBar] {
+        (0..<12).compactMap { cal.date(byAdding: .month, value: $0, to: interval.start) }.map { m in
+            let list = items(in: cal.dateInterval(of: .month, for: m)!)
+            return MonthBar(month: m,
+                            spent: list.filter { !$0.isIncome }.reduce(0) { $0 + $1.amount },
+                            income: list.filter(\.isIncome).reduce(0) { $0 + $1.amount })
+        }
+    }
+
+    private var dailyBars: [Point] {
+        let byDay = Dictionary(grouping: spending) { cal.startOfDay(for: $0.date) }
+            .mapValues { $0.reduce(0) { $0 + $1.amount } }
+        var points: [Point] = []
+        var d = interval.start
+        var i = 0
+        while d < interval.end && i < 400 {
+            points.append(Point(x: i, value: byDay[d] ?? 0, series: d.formatted(.dateTime.day().month(.abbreviated))))
+            d = cal.date(byAdding: .day, value: 1, to: d)!
+            i += 1
+        }
+        return points
+    }
+
+    @ViewBuilder private var trendCard: some View {
+        switch scope {
+        case .month: cumulativeCard
+        case .year: yearCard
+        case .custom: dailyCard
+        }
+    }
+
+    private var cumulativeCard: some View {
+        let data = cumulative
+        let thisTotal = data.last(where: { $0.series == "This month" })?.value ?? 0
+        let day = data.last(where: { $0.series == "This month" })?.x ?? 1
+        let lastAtSameDay = data.first(where: { $0.series == "Last month" && $0.x == day })?.value ?? 0
+        return VStack(alignment: .leading, spacing: 12) {
+            SectionTitle(title: "Spending pace")
+            Text(lastAtSameDay > 0
+                 ? "\(Formatters.money(thisTotal, currency)) by day \(day) — \(thisTotal <= lastAtSameDay ? "less" : "more") than \(Formatters.money(lastAtSameDay, currency)) at this point last month."
+                 : "\(Formatters.money(thisTotal, currency)) spent by day \(day).")
+                .font(.footnote).foregroundStyle(.secondary)
+            Chart(data) { p in
+                if p.series == "This month" {
+                    AreaMark(x: .value("Day", p.x), y: .value("Total", p.value))
+                        .foregroundStyle(LinearGradient(colors: [Theme.emerald.opacity(0.35), Theme.emerald.opacity(0.02)],
+                                                        startPoint: .top, endPoint: .bottom))
+                        .interpolationMethod(.monotone)
+                }
+                LineMark(x: .value("Day", p.x), y: .value("Total", p.value), series: .value("Series", p.series))
+                    .foregroundStyle(p.series == "This month" ? Theme.emerald : Color.secondary.opacity(0.6))
+                    .lineStyle(StrokeStyle(lineWidth: p.series == "This month" ? 3 : 2,
+                                           dash: p.series == "This month" ? [] : [5, 4]))
+                    .interpolationMethod(.monotone)
+            }
+            .chartXScale(domain: 1...31)
+            .chartXAxis {
+                AxisMarks(values: [1, 8, 15, 22, 29]) { v in
+                    AxisGridLine().foregroundStyle(Theme.cardStroke)
+                    AxisValueLabel { if let d = v.as(Int.self) { Text("\(d)") } }
                 }
             }
-            .chartXSelection(value: $selectedBar)
+            .chartYAxis {
+                AxisMarks(position: .leading) { _ in
+                    AxisGridLine().foregroundStyle(Theme.cardStroke)
+                    AxisValueLabel()
+                }
+            }
+            .frame(height: 190)
+            HStack(spacing: 16) {
+                legend("This month", Theme.emerald, dashed: false)
+                legend("Last month", .secondary, dashed: true)
+            }
+            .font(.caption).foregroundStyle(.secondary)
+        }
+        .card()
+    }
+
+    private var yearCard: some View {
+        let data = yearBars
+        let selected = selectedMonth.flatMap { s in data.first { cal.isDate($0.month, equalTo: s, toGranularity: .month) } }
+        let active = data.filter { $0.spent > 0 }
+        let avg = active.isEmpty ? 0 : active.map(\.spent).reduce(0, +) / Double(active.count)
+        return VStack(alignment: .leading, spacing: 12) {
+            SectionTitle(title: "Month by month",
+                         trailing: selected.map { "\($0.month.formatted(.dateTime.month(.abbreviated))): \(Formatters.money($0.spent, currency))" }
+                            ?? "avg \(Formatters.money(avg, currency))")
+            Chart {
+                ForEach(data) { m in
+                    BarMark(x: .value("Month", m.month, unit: .month), y: .value("Spent", m.spent), width: .ratio(0.55))
+                        .foregroundStyle(selected == nil || selected?.id == m.id
+                                         ? AnyShapeStyle(Theme.emerald.gradient) : AnyShapeStyle(Theme.emerald.opacity(0.3)))
+                        .cornerRadius(5)
+                    if m.income > 0 {
+                        PointMark(x: .value("Month", m.month, unit: .month), y: .value("Income", m.income))
+                            .symbolSize(40)
+                            .foregroundStyle(blue)
+                    }
+                }
+                if avg > 0 {
+                    RuleMark(y: .value("Average", avg))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .chartXSelection(value: $selectedMonth)
             .chartXAxis {
-                AxisMarks(values: .stride(by: .month)) { _ in
-                    AxisValueLabel(format: .dateTime.month(.narrow), centered: true)
+                AxisMarks(values: .stride(by: .month, count: 2)) { _ in
+                    AxisValueLabel(format: .dateTime.month(.abbreviated), centered: true)
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading) { _ in
+                    AxisGridLine().foregroundStyle(Theme.cardStroke)
+                    AxisValueLabel()
+                }
+            }
+            .frame(height: 190)
+            HStack(spacing: 16) {
+                legend("Spent", Theme.emerald, dashed: false)
+                legend("Income", blue, dashed: false)
+                legend("Average", .secondary, dashed: true)
+            }
+            .font(.caption).foregroundStyle(.secondary)
+        }
+        .card()
+    }
+
+    private var dailyCard: some View {
+        let data = dailyBars
+        let stride = max(1, data.count / 5)
+        return VStack(alignment: .leading, spacing: 12) {
+            SectionTitle(title: "Daily spending", trailing: "\(data.count) days")
+            Chart(data) { p in
+                BarMark(x: .value("Day", p.x), y: .value("Spent", p.value))
+                    .foregroundStyle(Theme.emerald.gradient)
+                    .cornerRadius(3)
+            }
+            .chartXAxis {
+                AxisMarks(values: Array(Swift.stride(from: 0, to: data.count, by: stride))) { v in
+                    AxisValueLabel {
+                        if let i = v.as(Int.self), i < data.count { Text(data[i].series) }
+                    }
                 }
             }
             .chartYAxis {
@@ -280,25 +431,56 @@ struct InsightsView: View {
                 }
             }
             .frame(height: 180)
-            HStack(spacing: 14) {
-                legend("Spent", Theme.emerald)
-                legend("Income", Color(light: 0x3B82F6, dark: 0x60A5FA))
-            }
-            .font(.caption).foregroundStyle(.secondary)
         }
         .card()
     }
 
-    private func highlight(_ m: MonthTotal) -> Bool {
-        if let s = selectedBar { return cal.isDate(m.month, equalTo: s, toGranularity: .month) }
-        return scope == .month ? cal.isDate(m.month, equalTo: interval.start, toGranularity: .month) : true
-    }
-
-    private func legend(_ title: String, _ color: Color) -> some View {
-        HStack(spacing: 5) {
-            Circle().fill(color).frame(width: 8, height: 8)
+    private func legend(_ title: String, _ color: Color, dashed: Bool) -> some View {
+        HStack(spacing: 6) {
+            Capsule()
+                .stroke(color, style: StrokeStyle(lineWidth: 3, dash: dashed ? [3, 3] : []))
+                .frame(width: 16, height: 3)
             Text(title)
         }
+    }
+
+    // MARK: Breakdown
+
+    struct Slice: Identifiable {
+        let id: String
+        let title: String
+        let symbol: String
+        let color: Color
+        let total: Double
+        let items: [Expense]
+    }
+
+    private var slices: [Slice] {
+        let groups: [String: [Expense]]
+        switch breakdown {
+        case .category: groups = Dictionary(grouping: spending) { $0.categoryRaw }
+        case .merchant: groups = Dictionary(grouping: spending) { $0.hasMerchant ? $0.merchant : "Unknown" }
+        case .bank: groups = Dictionary(grouping: spending) { ($0.bank?.isEmpty == false ? $0.bank! : "Not set") }
+        case .weekday: groups = Dictionary(grouping: spending) { $0.date.formatted(.dateTime.weekday(.wide)) }
+        }
+        return groups.map { key, list in
+            let total = list.reduce(0) { $0 + $1.amount }
+            switch breakdown {
+            case .category:
+                let c = CategoryStyle.of(key)
+                return Slice(id: key, title: key, symbol: c.symbol, color: c.color, total: total, items: list)
+            case .merchant:
+                let c = list.first?.style ?? CategoryStyle.of(ExpenseCategory.other.rawValue)
+                return Slice(id: key, title: key, symbol: c.symbol, color: c.color, total: total, items: list)
+            case .bank:
+                return Slice(id: key, title: key, symbol: key == "Not set" ? "questionmark.circle" : "building.columns.fill",
+                             color: key == "Not set" ? .secondary : Color(light: 0x0F766E, dark: 0x2DD4BF),
+                             total: total, items: list)
+            case .weekday:
+                return Slice(id: key, title: key, symbol: "calendar", color: blue, total: total, items: list)
+            }
+        }
+        .sorted { $0.total > $1.total }
     }
 
     private var breakdownCard: some View {
@@ -309,9 +491,7 @@ struct InsightsView: View {
             }
             .pickerStyle(.segmented)
 
-            if breakdown == .weekday {
-                weekdayChart
-            }
+            if breakdown == .category { donut }
 
             let list = breakdown == .merchant ? Array(slices.prefix(10)) : slices
             VStack(spacing: 2) {
@@ -324,31 +504,28 @@ struct InsightsView: View {
                     .buttonStyle(.plain)
                 }
             }
-            if breakdown == .bank && slices.contains(where: { $0.id == "Not set" }) {
-                Text("Tip: open a transaction to fill in its bank or account. Recognised banks are filled in automatically.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
         }
         .card()
     }
 
-    private var weekdayChart: some View {
-        let symbols = cal.shortWeekdaySymbols
-        let order = (0..<7).map { (cal.firstWeekday - 1 + $0) % 7 }
-        let totals = order.map { idx in
-            (symbols[idx], spending.filter { cal.component(.weekday, from: $0.date) == idx + 1 }.reduce(0) { $0 + $1.amount })
-        }
-        let maxTotal = totals.map(\.1).max() ?? 0
-        return Chart(totals, id: \.0) { item in
-            BarMark(x: .value("Day", item.0), y: .value("Spent", item.1), width: .ratio(0.55))
-                .foregroundStyle(item.1 == maxTotal && maxTotal > 0
-                                 ? AnyShapeStyle(Color(light: 0x3B82F6, dark: 0x60A5FA).gradient)
-                                 : AnyShapeStyle(Color(light: 0x3B82F6, dark: 0x60A5FA).opacity(0.3)))
+    private var donut: some View {
+        Chart(slices) { s in
+            SectorMark(angle: .value("Spent", s.total), innerRadius: .ratio(0.64), angularInset: 2)
+                .foregroundStyle(s.color)
                 .cornerRadius(4)
         }
-        .chartYAxis(.hidden)
-        .frame(height: 130)
+        .chartLegend(.hidden)
+        .frame(height: 170)
+        .overlay {
+            VStack(spacing: 2) {
+                Text("Spent").font(.caption).foregroundStyle(.secondary)
+                Text(Formatters.money(spent, currency)).font(.headline.weight(.bold)).minimumScaleFactor(0.6)
+            }
+            .frame(width: 110)
+        }
     }
+
+    private var largest: [Expense] { Array(spending.sorted { $0.amount > $1.amount }.prefix(5)) }
 
     private var largestCard: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -362,9 +539,30 @@ struct InsightsView: View {
         .card()
     }
 
+    // MARK: Monthly summary
+
+    private struct MonthTotal: Identifiable {
+        let month: Date
+        let spent: Double
+        let income: Double
+        let count: Int
+        var id: Date { month }
+    }
+
+    private var allMonths: [MonthTotal] {
+        Dictionary(grouping: base) { cal.startOfMonth(for: $0.date) }
+            .map { m, list in
+                MonthTotal(month: m,
+                           spent: list.filter { !$0.isIncome }.reduce(0) { $0 + $1.amount },
+                           income: list.filter(\.isIncome).reduce(0) { $0 + $1.amount },
+                           count: list.count)
+            }
+            .sorted { $0.month > $1.month }
+    }
+
     private var monthsCard: some View {
         VStack(alignment: .leading, spacing: 4) {
-            SectionTitle(title: "Monthly summary", trailing: "\(allMonths.count) months").padding(.bottom, 6)
+            SectionTitle(title: "Monthly summary", trailing: "Net").padding(.bottom, 6)
             if allMonths.isEmpty {
                 Text("Months appear here as transactions are recorded.")
                     .font(.subheadline).foregroundStyle(.secondary)
@@ -373,7 +571,6 @@ struct InsightsView: View {
                 Button {
                     scope = .month
                     anchor = m.month
-                    selectedBar = nil
                 } label: {
                     HStack(spacing: 12) {
                         VStack(spacing: 0) {
@@ -386,13 +583,14 @@ struct InsightsView: View {
                         .background(Theme.emeraldSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         VStack(alignment: .leading, spacing: 2) {
                             Text(m.month.formatted(.dateTime.month(.wide).year())).font(.subheadline.weight(.semibold))
-                            Text("\(m.count) transactions" + (m.income > 0 ? " · +\(Formatters.compactMoney(m.income, currency)) in" : ""))
-                                .font(.caption).foregroundStyle(.secondary)
+                            Text("Spent \(Formatters.money(m.spent, currency)) · In \(Formatters.money(m.income, currency))")
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
                         }
                         Spacer()
-                        Text(Formatters.money(m.spent, currency))
+                        let n = m.income - m.spent
+                        Text((n >= 0 ? "+" : "−") + Formatters.money(abs(n), currency))
                             .font(.subheadline.weight(.semibold)).monospacedDigit()
-                        Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.tertiary)
+                            .foregroundStyle(n >= 0 ? Theme.income : Theme.danger)
                     }
                     .padding(.vertical, 6)
                     .contentShape(Rectangle())
@@ -420,11 +618,11 @@ private struct SliceRow: View {
                 }
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(slice.color.opacity(0.12))
+                        Capsule().fill(slice.color.opacity(0.15))
                         Capsule().fill(slice.color.gradient).frame(width: max(5, geo.size.width * share))
                     }
                 }
-                .frame(height: 5)
+                .frame(height: 6)
                 HStack {
                     Text("\(slice.items.count) transaction\(slice.items.count == 1 ? "" : "s")")
                     Spacer()

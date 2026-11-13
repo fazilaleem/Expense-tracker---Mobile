@@ -219,4 +219,21 @@ final class TransactionParserTests: XCTestCase {
         XCTAssertEqual(p.account, "2021")
         XCTAssertEqual(Categorizer.categorize(merchant: p.merchant, text: sms, isIncome: false), .shopping)
     }
+
+    func testYearlyAndCustomBudgetWindows() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let date = ISO8601DateFormatter().date(from: "2026-11-06T15:30:00Z")!
+        let year = BudgetPeriod.yearly.interval(containing: date, calendar: cal)
+        XCTAssertEqual(cal.component(.month, from: year.start), 1)
+        XCTAssertEqual(cal.component(.day, from: year.start), 1)
+
+        let b = Budget(category: nil, period: .custom, limit: 100, currency: "BHD")
+        b.customStart = ISO8601DateFormatter().date(from: "2026-11-01T10:00:00Z")!
+        b.customEnd = ISO8601DateFormatter().date(from: "2026-11-10T10:00:00Z")!
+        let i = b.interval(calendar: cal)
+        XCTAssertEqual(i.duration, 10 * 86_400)            // 1–10 Nov inclusive
+        XCTAssertEqual(b.previousInterval(calendar: cal).duration, 10 * 86_400)
+        XCTAssertEqual(b.previousInterval(calendar: cal).end, i.start)
+    }
 }

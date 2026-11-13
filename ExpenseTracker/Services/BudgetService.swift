@@ -9,7 +9,11 @@ enum BudgetService {
     }
 
     static func status(of budget: Budget, at date: Date = .now, in expenses: [Expense]) -> BudgetStatus {
-        let interval = budget.period.interval(containing: date)
+        status(of: budget, interval: budget.interval(at: date), in: expenses)
+    }
+
+    /// Spending against a budget for any window (e.g. the previous period).
+    static func status(of budget: Budget, interval: DateInterval, in expenses: [Expense]) -> BudgetStatus {
         let spent = expenses
             .filter { budget.applies(to: $0) && interval.contains($0.date) }
             .reduce(0) { $0 + $1.amount }
@@ -17,7 +21,7 @@ enum BudgetService {
     }
 
     static func status(of budget: Budget, at date: Date = .now) -> BudgetStatus {
-        let interval = budget.period.interval(containing: date)
+        let interval = budget.interval(at: date)
         let start = interval.start, end = interval.end
         let descriptor = FetchDescriptor<Expense>(predicate: #Predicate {
             $0.date >= start && $0.date < end && $0.isIncome == false
@@ -33,11 +37,11 @@ enum BudgetService {
         let ctx = ExpenseStore.context
         let budgets = (try? ctx.fetch(FetchDescriptor<Budget>())) ?? []
         for budget in budgets where budget.isEnabled && budget.limit > 0 && budget.applies(to: expense) {
-            let interval = budget.period.interval(containing: .now)
+            let interval = budget.interval(at: .now)
             // Only alert for spending in the current period.
             guard interval.contains(expense.date) else { continue }
             let s = status(of: budget)
-            let key = budget.period.key(for: .now)
+            let key = budget.alertKey(at: .now)
 
             if s.ratio >= 1, budget.lastExceededKey != key {
                 budget.lastExceededKey = key

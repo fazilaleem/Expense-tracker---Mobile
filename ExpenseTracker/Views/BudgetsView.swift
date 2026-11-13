@@ -9,14 +9,32 @@ struct BudgetsView: View {
     @State private var editing: Budget?
     @State private var showingNew = false
     @State private var newPreset: (ExpenseCategory?, BudgetPeriod)?
+    @State private var window: Window = .current
+    @State private var periodFilter: BudgetPeriod?
+    @State private var statusFilter: BudgetStatus.Level?
 
-    private var overall: [Budget] { budgets.filter { $0.categoryRaw == nil } }
-    private var perCategory: [Budget] {
-        budgets.filter { $0.categoryRaw != nil }
-            .sorted { status($0).ratio > status($1).ratio }
+    enum Window: String, CaseIterable, Identifiable {
+        case current = "This period", previous = "Previous period"
+        var id: String { rawValue }
     }
 
-    private func status(_ b: Budget) -> BudgetStatus { BudgetService.status(of: b, in: expenses) }
+    private func status(_ b: Budget) -> BudgetStatus {
+        BudgetService.status(of: b, interval: window == .current ? b.interval() : b.previousInterval(), in: expenses)
+    }
+    private func previousStatus(_ b: Budget) -> BudgetStatus {
+        BudgetService.status(of: b, interval: b.previousInterval(), in: expenses)
+    }
+
+    private var filtered: [Budget] {
+        budgets.filter { b in
+            (periodFilter == nil || b.period == periodFilter)
+                && (statusFilter == nil || status(b).level == statusFilter)
+        }
+        .sorted { status($0).ratio > status($1).ratio }
+    }
+    private var overall: [Budget] { filtered.filter { $0.categoryRaw == nil } }
+    private var perCategory: [Budget] { filtered.filter { $0.categoryRaw != nil } }
+    private var periodsInUse: [BudgetPeriod] { BudgetPeriod.allCases.filter { p in budgets.contains { $0.period == p } } }
 
     var body: some View {
         NavigationStack {
@@ -25,10 +43,13 @@ struct BudgetsView: View {
                     if budgets.isEmpty {
                         emptyState.appearAnimation()
                     } else {
+                        filters.appearAnimation()
+                        summaryCard.appearAnimation(delay: 0.05)
+                        if filtered.count > 0 { comparisonChart.appearAnimation(delay: 0.1) }
                         ForEach(Array(overall.enumerated()), id: \.element.id) { i, b in
                             OverallBudgetCard(budget: b, status: status(b))
                                 .onTapGesture { editing = b }
-                                .appearAnimation(delay: Double(i) * 0.05)
+                                .appearAnimation(delay: 0.12 + Double(i) * 0.04)
                         }
                         if !perCategory.isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
@@ -36,7 +57,8 @@ struct BudgetsView: View {
                                     .padding(.bottom, 8)
                                 ForEach(Array(perCategory.enumerated()), id: \.element.id) { i, b in
                                     Button { editing = b } label: {
-                                        BudgetRow(budget: b, status: status(b))
+                                        BudgetRow(budget: b, status: status(b),
+                                                  previous: window == .current ? previousStatus(b) : nil)
                                     }
                                     .buttonStyle(.plain)
                                     .contextMenu {
@@ -49,13 +71,20 @@ struct BudgetsView: View {
                                 }
                             }
                             .card()
-                            .appearAnimation(delay: 0.1)
+                            .appearAnimation(delay: 0.15)
                         }
-                        alertInfo.appearAnimation(delay: 0.15)
+                        if filtered.isEmpty {
+                            ContentUnavailableView("No budgets match", systemImage: "line.3.horizontal.decrease.circle",
+                                                   description: Text("Change or clear the filters."))
+                        }
+                        alertInfo.appearAnimation(delay: 0.2)
                     }
                 }
                 .padding(16)
                 .animation(.snappy, value: budgets.count)
+                .animation(.snappy, value: window)
+                .animation(.snappy, value: periodFilter)
+                .animation(.snappy, value: statusFilter)
             }
             .scrollIndicators(.hidden)
             .themedBackground()
@@ -77,7 +106,125 @@ struct BudgetsView: View {
             .sheet(item: $editing) { b in
                 BudgetEditView(budget: b)
             }
+            .sensoryFeedback(.selection, trigger: window)
         }
+    }
+
+    // MARK: Filters
+
+    private var filters: some View {
+        VStack(spacing: 10) {
+            Picker("Window", selection: $window) {
+                ForEach(Window.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    FilterChip(title: "All", symbol: "square.grid.2x2", color: Theme.emerald,
+                               selected: periodFilter == nil) { periodFilter = nil }
+                    ForEach(periodsInUse) { p in
+                        FilterChip(title: p.label, symbol: "calendar", color: Theme.emerald,
+                                   selected: periodFilter == p) { periodFilter = periodFilter == p ? nil : p }
+                    }
+                    Divider().frame(height: 22)
+                    FilterChip(title: "Over", symbol: "exclamationmark.triangle.fill", color: Theme.danger,
+                               selected: statusFilter == .exceeded) { statusFilter = statusFilter == .exceeded ? nil : .exceeded }
+                    FilterChip(title: "Near limit", symbol: "exclamationmark.circle.fill", color: Theme.warning,
+                               selected: statusFilter == .warning) { statusFilter = statusFilter == .warning ? nil : .warning }
+                    FilterChip(title: "On track", symbol: "checkmark.circle.fill", color: Theme.emerald,
+                               selected: statusFilter == .ok) { statusFilter = statusFilter == .ok ? nil : .ok }
+                }
+                .padding(.vertical, 2)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    // MARK: Summary
+
+    private var summaryCard: some View {
+        let list = filtered.filter { $0.isEnabled }
+        // Avoid double counting: if an overall budget is shown, compare against it; otherwise sum categories.
+        let basis = list.contains { $0.categoryRaw == nil } ? list.filter { $0.categoryRaw == nil } : list
+        let budgeted = basis.reduce(0) { $0 + $1.limit }
+        let spent = basis.reduce(0) { $0 + status($1).spent }
+        let ratio = budgeted > 0 ? spent / budgeted : 0
+        let over = list.filter { status($0).level == .exceeded }.count
+        let near = list.filter { status($0).level == .warning }.count
+        let color: Color = ratio >= 1 ? Theme.danger : ratio >= 0.8 ? Theme.warning : Theme.emerald
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle().stroke(color.opacity(0.15), lineWidth: 11)
+                    Circle().trim(from: 0, to: min(ratio, 1))
+                        .stroke(color.gradient, style: StrokeStyle(lineWidth: 11, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Text("\(Int((ratio * 100).rounded()))%")
+                        .font(.system(.headline, design: .rounded).weight(.bold))
+                }
+                .frame(width: 78, height: 78)
+                .animation(.spring(response: 0.7, dampingFraction: 0.85), value: ratio)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(window == .current ? "Budget vs actual" : "Previous period")
+                        .font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                    Text("\(Formatters.money(spent, currency))")
+                        .font(.system(.title2, design: .rounded).weight(.bold))
+                        .contentTransition(.numericText(value: spent))
+                    Text("of \(Formatters.money(budgeted, currency)) budgeted")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                MetricTile(title: budgeted - spent >= 0 ? "Remaining" : "Over by",
+                           value: Formatters.money(abs(budgeted - spent), currency),
+                           color: budgeted - spent >= 0 ? Theme.income : Theme.danger, symbol: "wallet.pass")
+                MetricTile(title: "Budgets", value: "\(list.count)", symbol: "target")
+                MetricTile(title: "Near limit", value: "\(near)", color: near > 0 ? Theme.warning : .primary,
+                           symbol: "exclamationmark.circle")
+                MetricTile(title: "Over", value: "\(over)", color: over > 0 ? Theme.danger : .primary,
+                           symbol: "exclamationmark.triangle")
+            }
+        }
+        .card()
+    }
+
+    // MARK: Chart
+
+    private struct Bar: Identifiable {
+        let name: String
+        let series: String
+        let value: Double
+        var id: String { name + series }
+    }
+
+    private var comparisonChart: some View {
+        let shown = Array(filtered.prefix(8))
+        let bars = shown.flatMap { b -> [Bar] in
+            let name = b.shortTitle
+            return [Bar(name: name, series: "Budget", value: b.limit),
+                    Bar(name: name, series: "Actual", value: status(b).spent)]
+        }
+        return VStack(alignment: .leading, spacing: 12) {
+            SectionTitle(title: "Budget vs actual", trailing: window == .current ? "This period" : "Previous")
+            Chart(bars) { bar in
+                BarMark(x: .value("Budget", bar.name), y: .value("Amount", bar.value), width: .ratio(0.8))
+                    .foregroundStyle(by: .value("Series", bar.series))
+                    .position(by: .value("Series", bar.series))
+                    .cornerRadius(4)
+            }
+            .chartForegroundStyleScale(["Budget": Color.secondary.opacity(0.3), "Actual": Theme.emerald])
+            .chartLegend(position: .top, alignment: .leading)
+            .chartYAxis {
+                AxisMarks(position: .leading) { _ in
+                    AxisGridLine().foregroundStyle(Theme.cardStroke)
+                    AxisValueLabel()
+                }
+            }
+            .frame(height: 200)
+        }
+        .card()
     }
 
     private var alertInfo: some View {
@@ -165,7 +312,7 @@ struct OverallBudgetCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text("Overall").font(.headline)
-                    Pill(text: budget.period.label, color: .secondary)
+                    Pill(text: budget.periodLabel, color: .secondary)
                     if !budget.isEnabled { Pill(text: "Paused", color: .secondary) }
                 }
                 Text(Formatters.money(status.spent, budget.currency))
@@ -192,6 +339,8 @@ struct OverallBudgetCard: View {
 struct BudgetRow: View {
     let budget: Budget
     let status: BudgetStatus
+    /// Previous period, for the "vs last period" comparison.
+    var previous: BudgetStatus? = nil
     @State private var animated: Double = 0
 
     var body: some View {
@@ -200,7 +349,7 @@ struct BudgetRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(budget.shortTitle).font(.subheadline.weight(.semibold))
-                    Text(budget.period.label)
+                    Text(budget.periodLabel)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 6).padding(.vertical, 2)
@@ -233,6 +382,11 @@ struct BudgetRow: View {
                         Text("\(Formatters.compactMoney(status.remaining, budget.currency)) left")
                     }
                     Spacer()
+                    if let previous, previous.spent > 0 {
+                        let d = (status.spent - previous.spent) / previous.spent
+                        Text("\(d >= 0 ? "▲" : "▼") \(min(Int((abs(d) * 100).rounded()), 999))% vs last")
+                            .foregroundStyle(d > 0.05 ? Theme.danger : Theme.emerald)
+                    }
                     Text(budget.isEnabled ? status.timeLeftText : "Paused")
                 }
                 .font(.caption)
@@ -263,6 +417,8 @@ struct BudgetEditView: View {
     /// nil = overall; otherwise a built-in or custom category name.
     @State private var category: String?
     @State private var period: BudgetPeriod = .monthly
+    @State private var customStart = Calendar.current.startOfDay(for: .now)
+    @State private var customEnd = Calendar.current.date(byAdding: .day, value: 29, to: Calendar.current.startOfDay(for: .now))!
     @State private var limit: Double?
     @State private var currency = AppSettings.defaultCurrency
     @State private var warnAt: Double = 0.8
@@ -272,7 +428,7 @@ struct BudgetEditView: View {
     @FocusState private var amountFocused: Bool
 
     private var duplicate: Budget? {
-        allBudgets.first { $0.id != budget?.id && $0.categoryRaw == category && $0.period == period }
+        allBudgets.first { $0.id != budget?.id && $0.categoryRaw == category && $0.period == period && period != .custom }
     }
 
     var body: some View {
@@ -287,14 +443,20 @@ struct BudgetEditView: View {
                             .font(.system(size: 34, weight: .bold, design: .rounded))
                     }
                     .padding(.vertical, 6)
-                    Picker("Resets", selection: $period.animation(.snappy)) {
-                        ForEach(BudgetPeriod.allCases) { Text($0.label).tag($0) }
+                    Picker("Period", selection: $period.animation(.snappy)) {
+                        ForEach(BudgetPeriod.allCases) { Text($0.shortLabel).tag($0) }
                     }
                     .pickerStyle(.segmented)
+                    if period == .custom {
+                        DatePicker("From", selection: $customStart, displayedComponents: .date)
+                        DatePicker("To", selection: $customEnd, in: customStart..., displayedComponents: .date)
+                    }
                 } header: {
                     Text("Limit")
                 } footer: {
-                    Text("Counts \(category?.lowercased() ?? "all") spending in \(currency) \(period.noun), resetting every \(period == .daily ? "day" : period == .weekly ? "week" : "month").")
+                    Text(period == .custom
+                         ? "Counts \(category?.lowercased() ?? "all") spending in \(currency) between the two dates."
+                         : "Counts \(category?.lowercased() ?? "all") spending in \(currency) \(period.noun), resetting every \(period.shortLabel.lowercased()).")
                 }
 
                 Section("Applies to") {
@@ -364,6 +526,8 @@ struct BudgetEditView: View {
         if let b = budget {
             category = b.categoryRaw
             period = b.period
+            if let s = b.customStart { customStart = s }
+            if let e = b.customEnd { customEnd = e }
             limit = b.limit
             currency = b.currency
             warnAt = b.warnAt
@@ -391,6 +555,8 @@ struct BudgetEditView: View {
         }
         target.categoryRaw = category
         target.period = period
+        target.customStart = period == .custom ? customStart : nil
+        target.customEnd = period == .custom ? customEnd : nil
         target.limit = value
         target.warnAt = warnAt
         target.isEnabled = isEnabled
