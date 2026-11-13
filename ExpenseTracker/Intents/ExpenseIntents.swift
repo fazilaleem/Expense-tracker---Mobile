@@ -40,6 +40,13 @@ struct LogMessageIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         // Common setup mistake: typing a bank name into the Message field instead of
         // passing the received message. Without digits there can't be an amount.
+        // Run by hand (▶ in Shortcuts): there is no incoming SMS, so Message is empty. Not an error.
+        if message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            NotificationService.postSetupHint(
+                title: "Test run · no message",
+                body: "Run manually, so there was no SMS to read. The automation will record expenses when a matching SMS arrives.")
+            return .result(dialog: "No message to read — this is normal when running the automation manually.")
+        }
         if !message.contains(where: \.isNumber) {
             NotificationService.postSetupHint(
                 title: "Automation needs fixing",
