@@ -201,7 +201,9 @@ struct BudgetsView: View {
     }
 
     private var comparisonChart: some View {
-        let shown = Array(filtered.prefix(8))
+        // Categories only – the overall budget is in the ring above and would dwarf the bars.
+        let categories = filtered.filter { $0.categoryRaw != nil }
+        let shown = Array((categories.isEmpty ? filtered : categories).prefix(8))
         let bars = shown.flatMap { b -> [Bar] in
             let name = b.shortTitle
             return [Bar(name: name, series: "Budget", value: b.limit),
