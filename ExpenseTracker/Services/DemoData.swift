@@ -47,8 +47,8 @@ enum DemoData {
         }
         ctx.insert(Budget(category: nil, period: .monthly, limit: 300, currency: cur))
         ctx.insert(Budget(category: .food, period: .weekly, limit: 15, currency: cur))
-        ctx.insert(Budget(category: .groceries, period: .monthly, limit: 6, currency: cur))
-        ctx.insert(Budget(category: .transport, period: .daily, limit: 60, currency: cur))
+        ctx.insert(Budget(category: .groceries, period: .monthly, limit: 60, currency: cur))
+        ctx.insert(Budget(category: .transport, period: .daily, limit: 6, currency: cur))
         ctx.insert(Budget(category: .bills, period: .monthly, limit: 45, currency: cur))
         try? ctx.save()
     }
