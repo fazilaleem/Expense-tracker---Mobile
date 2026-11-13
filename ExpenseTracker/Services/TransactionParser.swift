@@ -27,6 +27,7 @@ enum TransactionParser {
         let text = rawText
             .replacingOccurrences(of: "\u{00A0}", with: " ")
             .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
         let lower = text.lowercased()
 
         if isNonTransactional(lower) { return nil }
@@ -146,7 +147,7 @@ enum TransactionParser {
     private static let numberPattern = #"[0-9]{1,3}(?:[,][0-9]{2,3})*(?:\.[0-9]{1,3})?|[0-9]+(?:\.[0-9]{1,3}|,[0-9]{1,2})?"#
 
     private static let currencyFirst = try! NSRegularExpression(
-        pattern: "(?<![A-Za-z])(\(currencyAlternation))\\s?(\(numberPattern))(?![0-9])",
+        pattern: "(?<![A-Za-z])(\(currencyAlternation))\\s*(\(numberPattern))(?![0-9])",
         options: [.caseInsensitive])
 
     private static let amountFirst = try! NSRegularExpression(
@@ -229,7 +230,8 @@ enum TransactionParser {
         #"\b(?:at|@)\s+"# + nameChars + stopWords,
         #"\b(?:to\s+vpa|vpa|paid\s+to|payment\s+to|transfer(?:red)?\s+to|trf\s+to|sent\s+to|towards|to)\s+"# + nameChars + stopWords,
         #"\binfo[:\-\s]+"# + nameChars + stopWords,
-        #"\bon\s+"# + nameChars + #"(?=\s+(?:on|using|with|via)\b)"#
+        #"\bon\s+"# + nameChars + #"(?=\s+(?:on|using|with|via)\b)"#,
+        #"\bfrom\s+"# + nameChars + stopWords
     ])).map { try! NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
 
     private static let creditMerchantPatterns: [NSRegularExpression] = ([String]([

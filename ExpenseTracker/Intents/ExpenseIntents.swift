@@ -55,6 +55,12 @@ struct LogMessageIntent: AppIntent {
         }
         let force: Bool? = recordAs == .automatic ? nil : (recordAs == .income)
         let result = ExpenseStore.logMessage(message, sender: sender, bank: bank, forceIncome: force, source: .sms)
+        if case .ignored = result {
+            // Don't fail silently: a bank SMS reached the app but couldn't be read.
+            NotificationService.postSetupHint(
+                title: "Couldn't read a bank SMS",
+                body: "“\(String(message.prefix(80)))…” — add it with + ▸ Paste bank SMS, and send the text to get the format supported.")
+        }
         NotificationService.confirm(result)
         return .result(dialog: IntentDialog(stringLiteral: result.summary))
     }

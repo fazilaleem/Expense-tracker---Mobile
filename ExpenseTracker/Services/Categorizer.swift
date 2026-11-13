@@ -25,7 +25,7 @@ enum Categorizer {
         (.travel, ["airline", "airways", "emirates", "etihad", "flydubai", "air arabia", "qatar airways",
                    "indigo", "vistara", "air india", "pia", "booking.com", "agoda", "expedia", "airbnb",
                    "hotel", "marriott", "hilton", "makemytrip", "skyscanner", "trip.com", "saudia"]),
-        (.shopping, ["amazon", "noon", "flipkart", "myntra", "ajio", "shein", "namshi", "ikea", "zara", "h&m",
+        (.shopping, ["phones", "mobile", "electronics", "amazon", "noon", "flipkart", "myntra", "ajio", "shein", "namshi", "ikea", "zara", "h&m",
                      "uniqlo", "nike", "adidas", "apple store", "sharaf dg", "jumbo", "croma", "reliance digital",
                      "daraz", "ebay", "etsy", "aliexpress", "temu", "mall", "centrepoint", "max fashion", "target",
                      "best buy", "decathlon", "home centre", "ace hardware"]),

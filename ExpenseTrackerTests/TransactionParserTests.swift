@@ -206,4 +206,16 @@ final class TransactionParserTests: XCTestCase {
         XCTAssertEqual(p.category, .groceries)
         XCTAssertNotNil(p.date)
     }
+
+    // Real KFH-style card SMS (double space before the amount, merchant after "from").
+    func testTrxFromMerchantDoubleSpace() throws {
+        let sms = "You have a Trx on your Card no. XXXX2021 from ANWAR ALBAHRAIN PHONES for BHD  2.600 on 13-Nov at 7:16 PM  GMT+3 Available Bal"
+        let p = try XCTUnwrap(parse(sms, "BHD"))
+        XCTAssertEqual(p.amount, 2.6, accuracy: 0.0001)
+        XCTAssertEqual(p.currency, "BHD")
+        XCTAssertFalse(p.isIncome)
+        XCTAssertEqual(p.merchant, "Anwar Albahrain Phones")
+        XCTAssertEqual(p.account, "2021")
+        XCTAssertEqual(Categorizer.categorize(merchant: p.merchant, text: sms, isIncome: false), .shopping)
+    }
 }
