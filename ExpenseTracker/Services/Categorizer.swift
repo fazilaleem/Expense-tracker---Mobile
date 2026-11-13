@@ -14,7 +14,7 @@ enum Categorizer {
                  "burger", "pizza", "domino", "subway", "swiggy", "zomato", "talabat", "deliveroo", "uber eats",
                  "ubereats", "foodpanda", "careem food", "doordash", "grubhub", "dunkin", "shawarma", "biryani",
                  "bakery", "eatery", "kitchen", "grill", "diner", "noon food", "hardee", "popeyes", "chipotle"]),
-        (.groceries, ["carrefour", "lulu", "spinneys", "waitrose", "tesco", "sainsbury", "asda", "aldi", "lidl",
+        (.groceries, ["groceries", "carrefour", "lulu", "spinneys", "waitrose", "tesco", "sainsbury", "asda", "aldi", "lidl",
                       "walmart", "costco", "kroger", "safeway", "whole foods", "trader joe", "bigbasket", "blinkit",
                       "zepto", "instamart", "dmart", "grocery", "supermarket", "hypermarket", "choithrams",
                       "union coop", "imtiaz", "metro cash", "al meera", "panda", "danube", "othaim", "instashop"]),

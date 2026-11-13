@@ -92,6 +92,21 @@ final class Expense {
         set { sourceRaw = newValue.rawValue }
     }
 
+    /// Merchant isn't meaningful when the parser couldn't find one.
+    var hasMerchant: Bool {
+        let m = merchant.trimmingCharacters(in: .whitespaces).lowercased()
+        return !m.isEmpty && !["unknown", "apple pay", "cash"].contains(m)
+    }
+
+    /// Secondary row text: "Carrefour · KFH · 12:16 PM"
+    var detailLine: String {
+        var parts: [String] = []
+        if hasMerchant { parts.append(merchant) }
+        if let b = bank, !b.isEmpty { parts.append(b) }
+        parts.append(date.formatted(date: .omitted, time: .shortened))
+        return parts.joined(separator: " · ")
+    }
+
     /// "Emirates NBD ••4321", "••4321", "Emirates NBD" or nil.
     var accountLabel: String? {
         let parts = [bank?.isEmpty == false ? bank : nil, account.map { "••\($0)" }].compactMap { $0 }

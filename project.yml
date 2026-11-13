@@ -21,6 +21,9 @@ targets:
       properties:
         CFBundleDisplayName: Expenses
         NSFaceIDUsageDescription: Unlock your expenses with Face ID.
+        NSMicrophoneUsageDescription: Speak an expense instead of typing it.
+        NSSpeechRecognitionUsageDescription: Turns what you say into an expense, on your iPhone.
+        NSCameraUsageDescription: Scan a receipt to fill in the amount and shop.
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIApplicationSceneManifest:

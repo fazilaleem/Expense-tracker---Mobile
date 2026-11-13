@@ -201,9 +201,13 @@ struct TransactionsView: View {
 struct AddMenu: View {
     @Binding var showingAdd: Bool
     @Binding var showingPaste: Bool
+    @State private var showingVoice = false
+    @State private var showingScan = false
     var body: some View {
         Menu {
             Button { showingAdd = true } label: { Label("Add expense manually", systemImage: "square.and.pencil") }
+            Button { showingVoice = true } label: { Label("Speak an expense", systemImage: "mic.fill") }
+            Button { showingScan = true } label: { Label("Scan a receipt", systemImage: "doc.viewfinder") }
             Button { showingPaste = true } label: { Label("Paste bank SMS", systemImage: "doc.on.clipboard") }
         } label: {
             Image(systemName: "plus")
@@ -214,6 +218,8 @@ struct AddMenu: View {
             showingAdd = true
         }
         .accessibilityLabel("Add expense")
+        .sheet(isPresented: $showingVoice) { VoiceEntryView().presentationDetents([.medium, .large]) }
+        .fullScreenCover(isPresented: $showingScan) { ReceiptScanView() }
     }
 }
 

@@ -172,4 +172,38 @@ final class TransactionParserTests: XCTestCase {
         let p = try XCTUnwrap(parse("BHD 500.000 has been credited to your account XXXX8115", "BHD"))
         XCTAssertTrue(p.isIncome)
     }
+
+    // MARK: Voice & receipt
+
+    func testVoiceDinarsAtMerchant() throws {
+        let p = VoiceParser.parse("2.5 dinars coffee at Costa", defaultCurrency: "BHD")
+        XCTAssertEqual(try XCTUnwrap(p.amount), 2.5, accuracy: 0.0001)
+        XCTAssertEqual(p.currency, "BHD")
+        XCTAssertEqual(p.merchant, "Costa")
+        XCTAssertEqual(p.category, .food)
+    }
+
+    func testVoiceShortForm() throws {
+        let p = VoiceParser.parse("taxi 3 BD", defaultCurrency: "BHD")
+        XCTAssertEqual(try XCTUnwrap(p.amount), 3, accuracy: 0.0001)
+        XCTAssertEqual(p.currency, "BHD")
+        XCTAssertEqual(p.category, .transport)
+    }
+
+    func testVoiceGroceries() throws {
+        let p = VoiceParser.parse("spent 45 on groceries", defaultCurrency: "BHD")
+        XCTAssertEqual(try XCTUnwrap(p.amount), 45, accuracy: 0.0001)
+        XCTAssertEqual(p.category, .groceries)
+    }
+
+    func testReceiptTotal() throws {
+        let lines = ["CARREFOUR CITY CENTRE", "Tel 17000000", "Milk 1.200", "Bread 0.450", "Subtotal 1.650",
+                     "VAT 10% 0.165", "TOTAL BHD 1.815", "Cash 2.000", "Change 0.185", "07/11/2026"]
+        let p = ReceiptParser.parse(lines: lines, defaultCurrency: "BHD")
+        XCTAssertEqual(try XCTUnwrap(p.amount), 1.815, accuracy: 0.0001)
+        XCTAssertEqual(p.currency, "BHD")
+        XCTAssertEqual(p.merchant, "Carrefour City Centre")
+        XCTAssertEqual(p.category, .groceries)
+        XCTAssertNotNil(p.date)
+    }
 }

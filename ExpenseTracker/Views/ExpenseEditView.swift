@@ -6,6 +6,8 @@ struct ExpenseEditView: View {
     let expense: Expense?
     /// Set when an existing expense is edited from a sheet (e.g. long-press ▸ Edit).
     var presentedAsSheet = false
+    /// Pre-filled values from voice entry or a scanned receipt (new expenses only).
+    var prefill: ExpensePrefill? = nil
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
 
@@ -28,7 +30,8 @@ struct ExpenseEditView: View {
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 4)
 
     var body: some View {
-        if expense == nil || presentedAsSheet {
+        // Embedded (voice / receipt flows) already provide a NavigationStack.
+        if (expense == nil && prefill == nil) || presentedAsSheet {
             NavigationStack { content }
         } else {
             content
@@ -239,7 +242,15 @@ struct ExpenseEditView: View {
         guard !loaded else { return }
         loaded = true
         guard let e = expense else {
-            amountFocused = true
+            if let p = prefill {
+                amount = p.amount
+                if let c = p.currency { currency = c }
+                if let m = p.merchant { merchant = m }
+                if let c = p.category { category = c; userPickedCategory = true }
+                if let n = p.note { note = n }
+                if let d = p.date { date = d }
+            }
+            amountFocused = prefill?.amount == nil
             return
         }
         amount = e.amount

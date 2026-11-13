@@ -83,6 +83,14 @@ struct DashboardView: View {
         budgets.first { $0.categoryRaw == nil && $0.period == .monthly && $0.isEnabled && $0.currency == currency }?.limit ?? 0
     }
 
+    /// Remaining monthly budget spread over the days left (including today).
+    private var safePerDay: Double {
+        let today = cal.component(.day, from: .now)
+        let daysInMonth = cal.range(of: .day, in: .month, for: .now)?.count ?? 30
+        let daysLeft = max(1, daysInMonth - today + 1)
+        return max(budget - total, 0) / Double(daysLeft)
+    }
+
     /// Budgets at or above their warning level right now.
     private var atRisk: [(budget: Budget, status: BudgetStatus)] {
         budgets.filter(\.isEnabled)
@@ -209,6 +217,15 @@ struct DashboardView: View {
             }
 
             if budget > 0 { budgetBar }
+            if budget > 0 && isCurrentMonth {
+                Label {
+                    Text("Safe to spend: **\(Formatters.money(safePerDay, currency))** / day")
+                } icon: {
+                    Image(systemName: "checkmark.shield.fill")
+                }
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.92))
+            }
 
             HStack(spacing: 8) {
                 heroChip("\(spending.count) transactions", symbol: "list.bullet")
@@ -526,13 +543,14 @@ struct ExpenseRow: View {
                         .offset(x: 3, y: 3)
                 }
             }
+            // Category is the headline; merchant / bank / time are supporting detail.
             VStack(alignment: .leading, spacing: 3) {
-                Text(expense.merchant)
+                Text(expense.category.rawValue)
                     .font(.body.weight(.semibold))
                     .lineLimit(1)
                 HStack(spacing: 4) {
                     Image(systemName: expense.source.symbol).font(.caption2)
-                    Text("\(expense.category.shortName) · \(expense.date.formatted(date: .omitted, time: .shortened))")
+                    Text(expense.detailLine)
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)

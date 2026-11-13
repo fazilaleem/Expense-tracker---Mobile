@@ -52,15 +52,17 @@ enum NotificationService {
     }
 
     /// Minimal two-line notification:
-    ///   −BHD 1.000 · Carrefour
-    ///   Groceries · KFH ••1234
+    ///   −BHD 1.000 · Groceries
+    ///   Carrefour · KFH ••1234
     static func postExpense(_ e: Expense, merged: Bool = false) {
         let content = UNMutableNotificationContent()
         let sign = e.isIncome ? "+" : "−"
-        content.title = "\(sign)\(Formatters.money(e.amount, e.currency)) · \(e.merchant)"
+        content.title = "\(sign)\(Formatters.money(e.amount, e.currency)) · \(e.category.rawValue)"
 
-        var details = [e.category.rawValue]
+        var details: [String] = []
+        if e.hasMerchant { details.append(e.merchant) }
         if let acc = e.accountLabel { details.append(acc) }
+        if details.isEmpty { details.append(e.source.label) }
         if merged {
             details = ["Already recorded"]
         } else if e.needsReview {
