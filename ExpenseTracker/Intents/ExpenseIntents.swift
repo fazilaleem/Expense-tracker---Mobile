@@ -200,7 +200,7 @@ extension ExpenseStore.LogResult {
         switch self {
         case .logged(let e):
             let review = e.needsReview ? " (flagged for review)" : ""
-            return "Recorded \(Formatters.money(e.amount, e.currency)) at \(e.merchant) in \(e.category.rawValue)\(review)."
+            return "Recorded \(Formatters.money(e.amount, e.currency)) at \(e.merchant) in \(e.categoryRaw)\(review)."
         case .merged(let e):
             return "\(Formatters.money(e.amount, e.currency)) at \(e.merchant) was already recorded – merged."
         case .ignored(let reason):

@@ -35,8 +35,8 @@ struct DashboardView: View {
     }
 
     private var byCategory: [CategoryTotal] {
-        Dictionary(grouping: spending, by: \.category)
-            .map { CategoryTotal(category: $0.key, total: $0.value.reduce(0) { $0 + $1.amount }, count: $0.value.count) }
+        Dictionary(grouping: spending, by: \.categoryRaw)
+            .map { CategoryTotal(category: CategoryStyle.of($0.key), total: $0.value.reduce(0) { $0 + $1.amount }, count: $0.value.count) }
             .sorted { $0.total > $1.total }
     }
 
@@ -75,6 +75,9 @@ struct DashboardView: View {
         }
         return nil
     }
+
+    /// Income minus expenses in the main currency.
+    private var net: Double { income - total }
 
     private var reviewCount: Int { allExpenses.filter(\.needsReview).count }
 
@@ -118,7 +121,12 @@ struct DashboardView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     monthSwitcher.appearAnimation()
-                    heroCard.appearAnimation(delay: 0.05)
+                    heroCard
+                        .contentShape(Rectangle())
+                        .onTapGesture { AppRouter.shared.selectedTab = 1 }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Opens Transactions")
+                        .appearAnimation(delay: 0.05)
                     if isCurrentMonth { quickStats.appearAnimation(delay: 0.1) }
                     if isCurrentMonth && !atRisk.isEmpty { budgetAlertCard.appearAnimation(delay: 0.11) }
                     if reviewCount > 0 { reviewBanner.appearAnimation(delay: 0.12) }
@@ -195,20 +203,29 @@ struct DashboardView: View {
     private var heroCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text(isCurrentMonth ? "Spent this month" : "Spent in \(month.formatted(.dateTime.month(.wide)))")
+                Text(isCurrentMonth ? "Net this month" : "Net in \(month.formatted(.dateTime.month(.wide)))")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.white.opacity(0.8))
                 Spacer()
-                Image(systemName: "wallet.pass.fill")
-                    .foregroundStyle(.white.opacity(0.5))
+                HStack(spacing: 4) {
+                    Text("Transactions")
+                    Image(systemName: "chevron.right")
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.7))
             }
 
-            Text(Formatters.money(total, currency))
+            Text((net >= 0 ? "+" : "−") + Formatters.money(abs(net), currency))
                 .font(.system(size: 40, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
-                .contentTransition(.numericText(value: total))
+                .contentTransition(.numericText(value: net))
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
+
+            HStack(spacing: 16) {
+                heroFigure("Income", Formatters.money(income, currency), symbol: "arrow.down.left")
+                heroFigure("Expenses", Formatters.money(total, currency), symbol: "arrow.up.right")
+            }
 
             if !otherCurrencyTotals.isEmpty {
                 Text("+ " + otherCurrencyTotals.map { Formatters.money($0.value, $0.key) }.joined(separator: "  + "))
@@ -232,9 +249,6 @@ struct DashboardView: View {
                 if let change = vsLastMonth {
                     heroChip("\(change >= 0 ? "+" : "−")\(min(Int((abs(change) * 100).rounded()), 999))% vs \(cal.date(byAdding: .month, value: -1, to: month)!.formatted(.dateTime.month(.abbreviated)))",
                              symbol: change >= 0 ? "arrow.up.right" : "arrow.down.right")
-                }
-                if income > 0 {
-                    heroChip("+\(Formatters.compactMoney(income, currency))", symbol: "arrow.down.left")
                 }
             }
         }
@@ -276,6 +290,18 @@ struct DashboardView: View {
         }
     }
 
+    private func heroFigure(_ title: String, _ value: String, symbol: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Label(title, systemImage: symbol)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.white.opacity(0.75))
+            Text(value)
+                .font(.system(.subheadline, design: .rounded).weight(.bold))
+                .foregroundStyle(.white)
+                .lineLimit(1).minimumScaleFactor(0.7)
+        }
+    }
+
     private func heroChip(_ text: String, symbol: String) -> some View {
         Label(text, systemImage: symbol)
             .font(.caption.weight(.semibold))
@@ -307,8 +333,8 @@ struct DashboardView: View {
             }
             ForEach(atRisk.prefix(3), id: \.budget.id) { item in
                 HStack(spacing: 10) {
-                    IconTile(symbol: item.budget.symbol, color: item.budget.category?.color ?? Theme.emerald, size: 28)
-                    Text("\(item.budget.category?.shortName ?? "Overall") · \(item.budget.period.label)")
+                    IconTile(symbol: item.budget.symbol, color: item.budget.style?.color ?? Theme.emerald, size: 28)
+                    Text("\(item.budget.shortTitle) · \(item.budget.period.label)")
                         .font(.subheadline)
                     Spacer()
                     Text("\(Int((item.status.ratio * 100).rounded()))%")
@@ -458,10 +484,10 @@ struct DashboardView: View {
 // MARK: - Supporting views & models
 
 struct CategoryTotal: Identifiable {
-    let category: ExpenseCategory
+    let category: CategoryStyle
     let total: Double
     let count: Int
-    var id: ExpenseCategory { category }
+    var id: String { category.rawValue }
 }
 
 struct DayTotal: Identifiable {
@@ -537,7 +563,7 @@ struct ExpenseRow: View {
     var body: some View {
         HStack(spacing: 12) {
             ZStack(alignment: .bottomTrailing) {
-                IconTile(symbol: expense.category.symbol, color: expense.category.color, size: 44)
+                IconTile(symbol: expense.style.symbol, color: expense.style.color, size: 44)
                 if expense.needsReview {
                     Circle().fill(Theme.warning)
                         .frame(width: 12, height: 12)
@@ -547,7 +573,7 @@ struct ExpenseRow: View {
             }
             // Category is the headline; merchant / bank / time are supporting detail.
             VStack(alignment: .leading, spacing: 3) {
-                Text(expense.category.rawValue)
+                Text(expense.style.rawValue)
                     .font(.body.weight(.semibold))
                     .lineLimit(1)
                 HStack(spacing: 4) {

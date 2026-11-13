@@ -72,6 +72,25 @@ enum Categorizer {
         return haystack.range(of: pattern, options: .regularExpression) != nil
     }
 
+    /// Like `categorize`, but learned rules may point to custom categories, so returns the raw name.
+    static func categoryRaw(merchant: String?, text: String?, isIncome: Bool) -> String {
+        if isIncome { return ExpenseCategory.income.rawValue }
+        let key = (merchant ?? "").lowercased().trimmingCharacters(in: .whitespaces)
+        if !key.isEmpty, let learned = learnedRules()[key],
+           ExpenseCategory(rawValue: learned) != nil || CategoryStore.all.contains(where: { $0.name == learned }) {
+            return learned
+        }
+        return categorize(merchant: merchant, text: text, isIncome: isIncome).rawValue
+    }
+
+    static func learn(merchant: String, raw: String) {
+        let key = merchant.lowercased().trimmingCharacters(in: .whitespaces)
+        guard !key.isEmpty else { return }
+        var rules = learnedRules()
+        rules[key] = raw
+        UserDefaults.standard.set(rules, forKey: rulesKey)
+    }
+
     // MARK: Learned rules
 
     static func learn(merchant: String, category: ExpenseCategory) {

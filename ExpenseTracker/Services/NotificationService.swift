@@ -57,7 +57,7 @@ enum NotificationService {
     static func postExpense(_ e: Expense, merged: Bool = false) {
         let content = UNMutableNotificationContent()
         let sign = e.isIncome ? "+" : "−"
-        content.title = "\(sign)\(Formatters.money(e.amount, e.currency)) · \(e.category.rawValue)"
+        content.title = "\(sign)\(Formatters.money(e.amount, e.currency)) · \(e.style.rawValue)"
 
         var details: [String] = []
         if e.hasMerchant { details.append(e.merchant) }

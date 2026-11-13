@@ -1,4 +1,4 @@
-# Expenses: automatic expense tracker for iPhone
+# Pocket Pulse: automatic expense tracker for iPhone
 
 A personal SwiftUI app that records your spending **automatically** from bank SMS
 alerts and Apple Pay / Wallet transactions. It categorises each one, flags anything

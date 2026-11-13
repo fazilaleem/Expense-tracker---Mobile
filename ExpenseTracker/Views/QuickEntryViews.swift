@@ -8,6 +8,8 @@ import VisionKit
 
 /// Hold-free voice capture: tap the mic, say "2.5 dinars coffee at Costa", tap again.
 struct VoiceEntryView: View {
+    /// When set (opened from the add screen), the result fills that form instead of opening a new one.
+    var onResult: ((ExpensePrefill) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @StateObject private var speech = SpeechCapture()
     @State private var prefill: ExpensePrefill?
@@ -70,8 +72,12 @@ struct VoiceEntryView: View {
         speech.stop()
         let text = speech.transcript.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
-        withAnimation(.snappy) {
-            prefill = VoiceParser.parse(text, defaultCurrency: AppSettings.defaultCurrency)
+        let p = VoiceParser.parse(text, defaultCurrency: AppSettings.defaultCurrency)
+        if let onResult {
+            onResult(p)
+            dismiss()
+        } else {
+            withAnimation(.snappy) { prefill = p }
         }
     }
 }
@@ -179,6 +185,7 @@ final class SpeechCapture: ObservableObject {
 /// Opens the document camera, reads the receipt with on-device text recognition,
 /// then shows the editor pre-filled with merchant, total and date.
 struct ReceiptScanView: View {
+    var onResult: ((ExpensePrefill) -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var prefill: ExpensePrefill?
     @State private var processing = false
@@ -205,8 +212,15 @@ struct ReceiptScanView: View {
                         processing = true
                         Task {
                             let lines = await ReceiptOCR.lines(from: images)
-                            prefill = ReceiptParser.parse(lines: lines, defaultCurrency: AppSettings.defaultCurrency)
+                            var p = ReceiptParser.parse(lines: lines, defaultCurrency: AppSettings.defaultCurrency)
+                            p.photo = images.first?.jpegData(compressionQuality: 0.6)   // keep the receipt as the attachment
                             processing = false
+                            if let onResult {
+                                onResult(p)
+                                dismiss()
+                            } else {
+                                prefill = p
+                            }
                         }
                     }
                     .ignoresSafeArea()

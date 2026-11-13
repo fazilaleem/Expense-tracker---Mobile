@@ -76,8 +76,11 @@ final class Budget {
         set { periodRaw = newValue.rawValue }
     }
 
-    var title: String { category?.rawValue ?? "Overall" }
-    var symbol: String { category?.symbol ?? "chart.pie.fill" }
+    /// nil for the overall budget.
+    var style: CategoryStyle? { categoryRaw.map(CategoryStyle.of) }
+    var title: String { categoryRaw ?? "Overall" }
+    var shortTitle: String { style?.shortName ?? "Overall" }
+    var symbol: String { style?.symbol ?? "chart.pie.fill" }
 
     func applies(to e: Expense) -> Bool {
         !e.isIncome && e.currency == currency && (categoryRaw == nil || e.categoryRaw == categoryRaw)

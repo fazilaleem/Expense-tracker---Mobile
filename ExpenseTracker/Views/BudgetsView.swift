@@ -196,10 +196,10 @@ struct BudgetRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            IconTile(symbol: budget.symbol, color: budget.category?.color ?? Theme.emerald, size: 40)
+            IconTile(symbol: budget.symbol, color: budget.style?.color ?? Theme.emerald, size: 40)
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
-                    Text(budget.category?.shortName ?? "Overall").font(.subheadline.weight(.semibold))
+                    Text(budget.shortTitle).font(.subheadline.weight(.semibold))
                     Text(budget.period.label)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -260,7 +260,8 @@ struct BudgetEditView: View {
     @Environment(\.dismiss) private var dismiss
     @Query private var allBudgets: [Budget]
 
-    @State private var category: ExpenseCategory?
+    /// nil = overall; otherwise a built-in or custom category name.
+    @State private var category: String?
     @State private var period: BudgetPeriod = .monthly
     @State private var limit: Double?
     @State private var currency = AppSettings.defaultCurrency
@@ -271,7 +272,7 @@ struct BudgetEditView: View {
     @FocusState private var amountFocused: Bool
 
     private var duplicate: Budget? {
-        allBudgets.first { $0.id != budget?.id && $0.categoryRaw == category?.rawValue && $0.period == period }
+        allBudgets.first { $0.id != budget?.id && $0.categoryRaw == category && $0.period == period }
     }
 
     var body: some View {
@@ -293,14 +294,14 @@ struct BudgetEditView: View {
                 } header: {
                     Text("Limit")
                 } footer: {
-                    Text("Counts \(category?.rawValue.lowercased() ?? "all") spending in \(currency) \(period.noun), resetting every \(period == .daily ? "day" : period == .weekly ? "week" : "month").")
+                    Text("Counts \(category?.lowercased() ?? "all") spending in \(currency) \(period.noun), resetting every \(period == .daily ? "day" : period == .weekly ? "week" : "month").")
                 }
 
                 Section("Applies to") {
                     Picker("Category", selection: $category) {
-                        Label("Overall (all spending)", systemImage: "chart.pie.fill").tag(ExpenseCategory?.none)
-                        ForEach(ExpenseCategory.allCases.filter { $0 != .income }) { c in
-                            Label(c.rawValue, systemImage: c.symbol).tag(ExpenseCategory?.some(c))
+                        Label("Overall (all spending)", systemImage: "chart.pie.fill").tag(String?.none)
+                        ForEach(CategoryStyle.allExpense) { c in
+                            Label(c.rawValue, systemImage: c.symbol).tag(String?.some(c.rawValue))
                         }
                     }
                     .pickerStyle(.navigationLink)
@@ -361,14 +362,14 @@ struct BudgetEditView: View {
         guard !loaded else { return }
         loaded = true
         if let b = budget {
-            category = b.category
+            category = b.categoryRaw
             period = b.period
             limit = b.limit
             currency = b.currency
             warnAt = b.warnAt
             isEnabled = b.isEnabled
         } else {
-            category = presetCategory
+            category = presetCategory?.rawValue
             period = presetPeriod
             amountFocused = true
         }
@@ -385,10 +386,10 @@ struct BudgetEditView: View {
                 b.lastExceededKey = nil
             }
         } else {
-            target = Budget(category: category, period: period, limit: value, currency: currency, warnAt: warnAt)
+            target = Budget(category: nil, period: period, limit: value, currency: currency, warnAt: warnAt)
             context.insert(target)
         }
-        target.category = category
+        target.categoryRaw = category
         target.period = period
         target.limit = value
         target.warnAt = warnAt

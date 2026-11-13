@@ -8,6 +8,11 @@ struct ExpensePrefill: Equatable {
     var category: ExpenseCategory?
     var note: String?
     var date: Date?
+    var categoryRaw: String?
+    var bank: String?
+    var account: String?
+    var rawText: String?
+    var photo: Data?
 }
 
 /// Turns a spoken phrase into an expense, e.g.

@@ -11,6 +11,12 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.mergeDuplicates) private var mergeDuplicates = true
     @AppStorage(SettingsKey.ignoreIncome) private var ignoreIncome = false
     @State private var exportURL: URL?
+    @State private var showNewCategory = false
+    @AppStorage(CategoryStore.key) private var customCategoriesData: Data = Data()
+    private var customCategories: [CustomCategory] {
+        _ = customCategoriesData
+        return CategoryStore.all
+    }
     @State private var confirmWipe = false
     @State private var learnedCount = Categorizer.learnedRules().count
 
@@ -24,7 +30,7 @@ struct SettingsView: View {
                             .frame(width: 58, height: 58)
                             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Expenses").font(.title3.weight(.bold))
+                            Text("Pocket Pulse").font(.title3.weight(.bold))
                             Text("\(expenses.count) transactions · stored on this iPhone")
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
@@ -71,6 +77,27 @@ struct SettingsView: View {
                 .tint(Theme.emerald)
                 .listRowBackground(Theme.card)
 
+                Section {
+                    ForEach(customCategories) { c in
+                        HStack(spacing: 12) {
+                            IconTile(symbol: c.symbol, color: Color(hex: c.colorHex), size: 30, filled: true)
+                            Text(c.name)
+                        }
+                    }
+                    .onDelete { idx in
+                        for i in idx { CategoryStore.remove(customCategories[i].name) }
+                    }
+                    Button { showNewCategory = true } label: {
+                        row("Add category", symbol: "plus", color: Theme.emerald)
+                    }
+                    .foregroundStyle(.primary)
+                } header: {
+                    Text("Categories")
+                } footer: {
+                    Text("Custom categories appear when adding or editing an entry, in budgets and in Insights. Swipe left to delete one; existing entries keep its name.")
+                }
+                .listRowBackground(Theme.card)
+
                 Section("Data") {
                     Button {
                         exportURL = CSVExporter.export(expenses)
@@ -108,6 +135,7 @@ struct SettingsView: View {
             .themedBackground()
             .navigationTitle("Settings")
             .onAppear { learnedCount = Categorizer.learnedRules().count }
+            .sheet(isPresented: $showNewCategory) { NewCategoryView { _ in } }
             .confirmationDialog("Delete all \(expenses.count) transactions?", isPresented: $confirmWipe, titleVisibility: .visible) {
                 Button("Delete everything", role: .destructive) {
                     for e in expenses { context.delete(e) }

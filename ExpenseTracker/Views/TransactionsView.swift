@@ -7,7 +7,7 @@ struct TransactionsView: View {
     @Query(sort: \Expense.date, order: .reverse) private var expenses: [Expense]
     @AppStorage(SettingsKey.defaultCurrency) private var currency = AppSettings.defaultCurrency
     @State private var search = ""
-    @State private var categoryFilter: ExpenseCategory?
+    @State private var categoryFilter: CategoryStyle?
     @State private var showingAdd = false
     @State private var showingPaste = false
     @State private var editingSheet: Expense?
@@ -15,7 +15,7 @@ struct TransactionsView: View {
     private var filtered: [Expense] {
         expenses.filter { e in
             (!onlyReview || e.needsReview) &&
-            (categoryFilter == nil || e.category == categoryFilter) &&
+            (categoryFilter == nil || e.categoryRaw == categoryFilter?.rawValue) &&
             (search.isEmpty || e.merchant.localizedCaseInsensitiveContains(search)
                 || (e.note ?? "").localizedCaseInsensitiveContains(search)
                 || (e.bank ?? "").localizedCaseInsensitiveContains(search)
@@ -36,10 +36,10 @@ struct TransactionsView: View {
     }
 
     /// Categories that actually have transactions, most used first.
-    private var usedCategories: [ExpenseCategory] {
-        Dictionary(grouping: expenses, by: \.category)
+    private var usedCategories: [CategoryStyle] {
+        Dictionary(grouping: expenses, by: \.categoryRaw)
             .sorted { $0.value.count > $1.value.count }
-            .map(\.key)
+            .map { CategoryStyle.of($0.key) }
     }
 
     private var filteredSpend: Double {
@@ -214,8 +214,6 @@ struct AddMenu: View {
                 .font(.body.weight(.semibold))
                 .frame(width: 34, height: 34)
                 .background(Theme.emeraldSoft, in: Circle())
-        } primaryAction: {
-            showingAdd = true
         }
         .accessibilityLabel("Add expense")
         .sheet(isPresented: $showingVoice) { VoiceEntryView().presentationDetents([.medium, .large]) }

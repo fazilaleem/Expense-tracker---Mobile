@@ -14,7 +14,7 @@ struct AppLockView: View {
                 .frame(width: 88, height: 88)
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .shadow(color: Theme.emerald.opacity(0.35), radius: 16, y: 8)
-            Text("Expenses is locked").font(.title3.weight(.bold))
+            Text("Pocket Pulse is locked").font(.title3.weight(.bold))
             Text("Unlock with \(biometryName) to view your spending.")
                 .font(.subheadline).foregroundStyle(.secondary)
             Button(action: authenticate) {

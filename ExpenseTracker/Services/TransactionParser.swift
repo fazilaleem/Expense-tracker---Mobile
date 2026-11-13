@@ -40,10 +40,8 @@ enum TransactionParser {
         if direction == nil && looksPromotional(lower) { return nil }
 
         let isIncome = direction == .credit
-        var merchant = extractMerchant(from: text, isIncome: isIncome)
-        if merchant == nil && !isIncome && (lower.contains("iban") || lower.contains("beneficiary")) {
-            merchant = "IBAN transfer"
-        }
+        let merchant = extractMerchant(from: text, isIncome: isIncome)
+
         let account = extractAccount(from: text)
 
         var confidence = 0.4

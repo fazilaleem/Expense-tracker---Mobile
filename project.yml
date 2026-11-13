@@ -19,7 +19,7 @@ targets:
     info:
       path: ExpenseTracker/Resources/Info.plist
       properties:
-        CFBundleDisplayName: Expenses
+        CFBundleDisplayName: Pocket Pulse
         NSFaceIDUsageDescription: Unlock your expenses with Face ID.
         NSMicrophoneUsageDescription: Speak an expense instead of typing it.
         NSSpeechRecognitionUsageDescription: Turns what you say into an expense, on your iPhone.

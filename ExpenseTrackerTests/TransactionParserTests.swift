@@ -161,11 +161,12 @@ final class TransactionParserTests: XCTestCase {
 
     // "Credited to beneficiary IBAN" = money sent from your account.
     func testCreditedToBeneficiaryIBANIsExpense() throws {
-        let p = try XCTUnwrap(parse("BHD 50.000 credited to beneficiary IBAN BH12XXXXXXXX0001 from your account XXXX8115 on 07/11/2026", "BHD"))
+        let sms = "BHD 50.000 credited to beneficiary IBAN BH12XXXXXXXX0001 from your account XXXX8115 on 07/11/2026"
+        let p = try XCTUnwrap(parse(sms, "BHD"))
         XCTAssertFalse(p.isIncome)
         XCTAssertEqual(p.amount, 50, accuracy: 0.0001)
-        XCTAssertEqual(p.merchant, "IBAN transfer")
-        XCTAssertEqual(Categorizer.categorize(merchant: p.merchant, text: nil, isIncome: false), .transfer)
+        XCTAssertNil(p.merchant)   // not recognised → shown as Unknown
+        XCTAssertEqual(Categorizer.categorize(merchant: p.merchant, text: sms, isIncome: false), .transfer)
     }
 
     func testRealIncomeStillIncome() throws {

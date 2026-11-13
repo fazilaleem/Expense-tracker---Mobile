@@ -19,7 +19,7 @@ enum CSVExporter {
             rows.append([
                 df.string(from: e.date),
                 e.merchant,
-                e.category.rawValue,
+                e.categoryRaw,
                 String(format: "%.2f", e.amount),
                 e.currency,
                 e.isIncome ? "Income" : "Expense",

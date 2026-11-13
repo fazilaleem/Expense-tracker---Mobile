@@ -118,7 +118,7 @@ struct InsightsView: View {
     private var slices: [Slice] {
         let groups: [String: [Expense]]
         switch breakdown {
-        case .category: groups = Dictionary(grouping: spending) { $0.category.rawValue }
+        case .category: groups = Dictionary(grouping: spending) { $0.categoryRaw }
         case .merchant: groups = Dictionary(grouping: spending) { $0.merchant }
         case .bank: groups = Dictionary(grouping: spending) { ($0.bank?.isEmpty == false ? $0.bank! : "Not set") }
         case .weekday: groups = Dictionary(grouping: spending) { $0.date.formatted(.dateTime.weekday(.wide)) }
@@ -127,10 +127,10 @@ struct InsightsView: View {
             let total = list.reduce(0) { $0 + $1.amount }
             switch breakdown {
             case .category:
-                let c = ExpenseCategory(rawValue: key) ?? .other
+                let c = CategoryStyle.of(key)
                 return Slice(id: key, title: key, symbol: c.symbol, color: c.color, total: total, items: list)
             case .merchant:
-                let c = list.first?.category ?? .other
+                let c = list.first?.style ?? CategoryStyle.of(ExpenseCategory.other.rawValue)
                 return Slice(id: key, title: key, symbol: c.symbol, color: c.color, total: total, items: list)
             case .bank:
                 return Slice(id: key, title: key, symbol: key == "Not set" ? "questionmark.circle" : "building.columns.fill",

@@ -41,10 +41,11 @@ enum ExpenseStore {
         if parsed.isIncome && AppSettings.ignoreIncome {
             return .ignored("Income messages are ignored (see Settings).")
         }
-        let category = Categorizer.categorize(merchant: parsed.merchant, text: text, isIncome: parsed.isIncome)
+        let categoryRaw = Categorizer.categoryRaw(merchant: parsed.merchant, text: text, isIncome: parsed.isIncome)
+        let category = ExpenseCategory(rawValue: categoryRaw) ?? .other
         let expense = Expense(amount: parsed.amount,
                               currency: parsed.currency,
-                              merchant: parsed.merchant ?? (sender ?? "Unknown"),
+                              merchant: parsed.merchant ?? "Unknown",
                               category: category,
                               date: date,
                               source: source,
@@ -54,7 +55,8 @@ enum ExpenseStore {
                                     ?? BankDetector.detect(text: text, sender: sender),
                               rawText: text,
                               sender: sender,
-                              needsReview: parsed.confidence < 0.6 || parsed.merchant == nil)
+                              needsReview: parsed.confidence < 0.6)
+        expense.categoryRaw = categoryRaw
         return save(expense)
     }
 
@@ -66,10 +68,11 @@ enum ExpenseStore {
             return .ignored("Couldn't read the amount “\(amountText)”.")
         }
         let name = merchant?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let category = Categorizer.categorize(merchant: name, text: nil, isIncome: false)
+        let categoryRaw = Categorizer.categoryRaw(merchant: name, text: nil, isIncome: false)
+        let category = ExpenseCategory(rawValue: categoryRaw) ?? .other
         let expense = Expense(amount: money.value,
                               currency: money.currency,
-                              merchant: (name?.isEmpty == false ? name! : "Apple Pay"),
+                              merchant: (name?.isEmpty == false ? name! : "Unknown"),
                               category: category,
                               date: date,
                               source: .wallet,
@@ -77,6 +80,7 @@ enum ExpenseStore {
                               bank: BankDetector.fromWalletCard(card),
                               rawText: "Wallet: \(amountText) at \(name ?? "?") – \(card ?? "")",
                               needsReview: name?.isEmpty ?? true)
+        expense.categoryRaw = categoryRaw
         return save(expense)
     }
 
@@ -136,6 +140,7 @@ enum ExpenseStore {
         let copy = Expense(amount: e.amount, currency: e.currency, merchant: e.merchant, category: e.category,
                            date: .now, source: .manual, isIncome: e.isIncome, account: e.account, bank: e.bank,
                            note: e.note)
+        copy.categoryRaw = e.categoryRaw   // keeps custom categories
         context.insert(copy)
         try? context.save()
         BudgetService.evaluate(after: copy)

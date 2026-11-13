@@ -50,6 +50,8 @@ final class Expense {
     var note: String?
     /// Set when the parser was unsure (e.g. no merchant found) so you can review it.
     var needsReview: Bool = false
+    /// Optional supporting image (receipt, invoice…), stored outside the database file.
+    @Attribute(.externalStorage) var photo: Data?
     var createdAt: Date = Date()
 
     init(amount: Double,
@@ -82,6 +84,9 @@ final class Expense {
         self.createdAt = .now
     }
 
+    /// Display info – works for built-in and custom categories.
+    var style: CategoryStyle { CategoryStyle.of(categoryRaw) }
+
     var category: ExpenseCategory {
         get { ExpenseCategory(rawValue: categoryRaw) ?? .other }
         set { categoryRaw = newValue.rawValue }
@@ -98,10 +103,9 @@ final class Expense {
         return !m.isEmpty && !["unknown", "apple pay", "cash"].contains(m)
     }
 
-    /// Secondary row text: "12:16 PM · Carrefour · KFH" (time first so it never gets cut off)
+    /// Secondary row text: "12:16 PM · KFH" – time and bank only.
     var detailLine: String {
         var parts = [date.formatted(date: .omitted, time: .shortened)]
-        if hasMerchant { parts.append(merchant) }
         if let b = bank, !b.isEmpty { parts.append(b) }
         return parts.joined(separator: " · ")
     }
