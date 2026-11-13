@@ -98,12 +98,11 @@ final class Expense {
         return !m.isEmpty && !["unknown", "apple pay", "cash"].contains(m)
     }
 
-    /// Secondary row text: "Carrefour · KFH · 12:16 PM"
+    /// Secondary row text: "12:16 PM · Carrefour · KFH" (time first so it never gets cut off)
     var detailLine: String {
-        var parts: [String] = []
+        var parts = [date.formatted(date: .omitted, time: .shortened)]
         if hasMerchant { parts.append(merchant) }
         if let b = bank, !b.isEmpty { parts.append(b) }
-        parts.append(date.formatted(date: .omitted, time: .shortened))
         return parts.joined(separator: " · ")
     }
 

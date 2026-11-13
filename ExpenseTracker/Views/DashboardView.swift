@@ -228,13 +228,13 @@ struct DashboardView: View {
             }
 
             HStack(spacing: 8) {
-                heroChip("\(spending.count) transactions", symbol: "list.bullet")
+                heroChip("\(spending.count)", symbol: "list.bullet")
                 if let change = vsLastMonth {
-                    heroChip("\(change >= 0 ? "+" : "−")\(Int((abs(change) * 100).rounded()))% vs last month",
+                    heroChip("\(change >= 0 ? "+" : "−")\(min(Int((abs(change) * 100).rounded()), 999))% vs \(cal.date(byAdding: .month, value: -1, to: month)!.formatted(.dateTime.month(.abbreviated)))",
                              symbol: change >= 0 ? "arrow.up.right" : "arrow.down.right")
                 }
                 if income > 0 {
-                    heroChip("+\(Formatters.compactMoney(income, currency)) in", symbol: "arrow.down.left")
+                    heroChip("+\(Formatters.compactMoney(income, currency))", symbol: "arrow.down.left")
                 }
             }
         }
@@ -279,6 +279,8 @@ struct DashboardView: View {
     private func heroChip(_ text: String, symbol: String) -> some View {
         Label(text, systemImage: symbol)
             .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .fixedSize()
             .foregroundStyle(.white)
             .padding(.horizontal, 10).padding(.vertical, 6)
             .background(.white.opacity(0.16), in: Capsule())
