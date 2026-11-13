@@ -94,27 +94,27 @@ jobs:
             for t in 0 1 2 3 4; do
               xcrun simctl terminate "$UDID" $APP 2>/dev/null || true
               xcrun simctl launch "$UDID" $APP -seedDemo YES -hasOnboarded YES -startTab $t \
-                -defaultCurrency AED
+                -defaultCurrency BHD
               sleep 5
               xcrun simctl io "$UDID" screenshot "shots/${mode}-${t}-${names[$t]}.png"
             done
             for target in categories bottom; do
               xcrun simctl terminate "$UDID" $APP 2>/dev/null || true
               xcrun simctl launch "$UDID" $APP -seedDemo YES -hasOnboarded YES -startTab 0 \
-                -defaultCurrency AED -demoScrollTo $target
+                -defaultCurrency BHD -demoScrollTo $target
               sleep 6
               xcrun simctl io "$UDID" screenshot "shots/${mode}-0-overview-${target}.png"
             done
             xcrun simctl terminate "$UDID" $APP 2>/dev/null || true
             xcrun simctl launch "$UDID" $APP -seedDemo YES -hasOnboarded YES -startTab 0 \
-              -defaultCurrency AED -demoShowAdd YES
+              -defaultCurrency BHD -demoShowAdd YES
             sleep 5
             xcrun simctl io "$UDID" screenshot "shots/${mode}-5-add.png"
           done
           # Onboarding / setup guide
           xcrun simctl ui "$UDID" appearance light
           xcrun simctl terminate "$UDID" $APP 2>/dev/null || true
-          xcrun simctl launch "$UDID" $APP -seedDemo YES -hasOnboarded NO -defaultCurrency AED
+          xcrun simctl launch "$UDID" $APP -seedDemo YES -hasOnboarded NO -defaultCurrency BHD
           sleep 5
           xcrun simctl io "$UDID" screenshot shots/light-4-setup.png
           ls -la shots

@@ -14,8 +14,7 @@ enum SettingsKey {
 
 enum AppSettings {
     static var defaultCurrency: String {
-        UserDefaults.standard.string(forKey: SettingsKey.defaultCurrency)
-            ?? Locale.current.currency?.identifier ?? "USD"
+        UserDefaults.standard.string(forKey: SettingsKey.defaultCurrency) ?? "BHD"
     }
     static var notifyOnLog: Bool {
         UserDefaults.standard.object(forKey: SettingsKey.notifyOnLog) as? Bool ?? true
@@ -28,7 +27,13 @@ enum AppSettings {
         UserDefaults.standard.object(forKey: SettingsKey.ignoreIncome) as? Bool ?? false
     }
 
-    static let commonCurrencies = ["AED", "USD", "EUR", "GBP", "INR", "PKR", "SAR", "QAR", "OMR", "KWD",
-                                   "BHD", "CAD", "AUD", "SGD", "MYR", "JPY", "NGN", "KES", "ZAR", "LKR",
-                                   "BDT", "NPR", "EGP", "TRY", "PHP"]
+    /// One-time switch of the main currency to BHD (the owner's local currency).
+    static func applyLocalCurrencyOnce() {
+        let key = "didSetLocalCurrencyBHD"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set("BHD", forKey: SettingsKey.defaultCurrency)
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
+    static let commonCurrencies = ["BHD", "KWD", "SAR", "AED", "QAR", "OMR", "USD", "EUR", "GBP", "INR", "PKR", "CAD", "AUD", "SGD", "MYR", "JPY", "NGN", "KES", "ZAR", "LKR", "BDT", "NPR", "EGP", "TRY", "PHP"]
 }

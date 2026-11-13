@@ -5,6 +5,7 @@ import SwiftData
 struct ExpenseTrackerApp: App {
     init() {
         let underTest = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        if !DemoData.isEnabled { AppSettings.applyLocalCurrencyOnce() }
         NotificationService.configure()
         BudgetService.migrateLegacyMonthlyBudget()
         if DemoData.isEnabled {
