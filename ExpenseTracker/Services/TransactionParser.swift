@@ -257,11 +257,29 @@ enum TransactionParser {
         }
         // Collapse whitespace.
         out = out.split(whereSeparator: { $0 == " " }).joined(separator: " ")
+        // Well-known billing descriptors → brand ("APPLE.COM/BILL ITUNES.COM IE" → "Apple").
+        if let brand = knownBrand(out) { return brand }
+        // Drop a trailing 2-letter country code ("… IE", "… BH") and billing suffixes.
+        out = out.replacingOccurrences(of: #"\s+[A-Z]{2}$"#, with: "", options: .regularExpression)
+        out = out.replacingOccurrences(of: #"(?i)/bill\b"#, with: "", options: .regularExpression)
         // Title-case shouty merchant names: "CARREFOUR DUBAI" → "Carrefour Dubai"
         if out == out.uppercased(), out.count > 3 {
             out = out.capitalized
         }
         return out
+    }
+
+    private static let brands: [(String, String)] = [
+        ("apple.com", "Apple"), ("itunes", "Apple"), ("netflix", "Netflix"), ("spotify", "Spotify"),
+        ("amazon", "Amazon"), ("amzn", "Amazon"), ("google", "Google"), ("youtube", "YouTube"),
+        ("microsoft", "Microsoft"), ("openai", "OpenAI"), ("anthropic", "Anthropic"), ("uber", "Uber"),
+        ("careem", "Careem"), ("talabat", "Talabat"), ("noon.com", "Noon"), ("paypal", "PayPal"),
+        ("starbucks", "Starbucks"), ("mcdonald", "McDonald's"), ("kfc", "KFC"), ("lulu", "Lulu")
+    ]
+
+    static func knownBrand(_ s: String) -> String? {
+        let lower = s.lowercased()
+        return brands.first { lower.contains($0.0) }?.1
     }
 
     private static func isPlausibleMerchant(_ s: String) -> Bool {

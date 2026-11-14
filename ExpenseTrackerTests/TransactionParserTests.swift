@@ -236,4 +236,20 @@ final class TransactionParserTests: XCTestCase {
         XCTAssertEqual(b.previousInterval(calendar: cal).duration, 10 * 86_400)
         XCTAssertEqual(b.previousInterval(calendar: cal).end, i.start)
     }
+
+    // Al Salam-style debit: no space after BHD, billing descriptor merchant.
+    func testAppleBillingDebit() throws {
+        let sms = "Dear Client,  BHD2.132 has been debited from your account XXXX81150000 at APPLE.COM/BILL ITUNES.COM IE on 14/11 at 10:00."
+        let p = try XCTUnwrap(parse(sms, "BHD"))
+        XCTAssertEqual(p.amount, 2.132, accuracy: 0.0001)
+        XCTAssertEqual(p.currency, "BHD")
+        XCTAssertFalse(p.isIncome)
+        XCTAssertEqual(p.merchant, "Apple")
+        XCTAssertEqual(Categorizer.categorize(merchant: p.merchant, text: sms, isIncome: false), .subscriptions)
+    }
+
+    func testCountryCodeStripped() throws {
+        let p = try XCTUnwrap(parse("BHD 5.000 has been debited from your account XXXX1111 at CITY CENTRE CAFE BH on 14/11", "BHD"))
+        XCTAssertEqual(p.merchant, "City Centre Cafe")
+    }
 }
