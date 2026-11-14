@@ -257,8 +257,9 @@ enum TransactionParser {
         }
         // Collapse whitespace.
         out = out.split(whereSeparator: { $0 == " " }).joined(separator: " ")
-        // Well-known billing descriptors → brand ("APPLE.COM/BILL ITUNES.COM IE" → "Apple").
-        if let brand = knownBrand(out) { return brand }
+        // Billing descriptors (contain . / or *) → brand: "APPLE.COM/BILL ITUNES.COM IE" → "Apple".
+        // Plain shop names like "KFC Gulberg" keep their branch detail.
+        if out.contains(where: { ".*/".contains($0) }), let brand = knownBrand(out) { return brand }
         // Drop a trailing 2-letter country code ("… IE", "… BH") and billing suffixes.
         out = out.replacingOccurrences(of: #"\s+[A-Z]{2}$"#, with: "", options: .regularExpression)
         out = out.replacingOccurrences(of: #"(?i)/bill\b"#, with: "", options: .regularExpression)
